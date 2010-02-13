@@ -1,0 +1,86 @@
+#!/usr/bin/python
+#
+# Create a local user based on a launchpad account. The useracount will be
+# created with a locked password and an ssh authorized_keys file with all their
+# keys on launchpad.
+
+# Abuse the docstring so running this with /bin/sh will do the right thing
+"""exec" "/usr/bin/python" "$0"""
+__doc__ = "Create a local user based on a launchpad account"
+__all__ = ["create_user"]
+
+import os, pwd, subprocess, urllib2, xml.dom.minidom
+
+lp = "https://launchpad.net/~"
+
+def verify_exists(lpuser):
+    try:
+        urllib2.urlopen(lp + lpuser)
+        return True
+    except:
+        return False
+
+def get_realname(lpuser):
+    rdf = urllib2.urlopen(lp + lpuser + "/+rdf").read()
+    tree = xml.dom.minidom.parseString(rdf)
+    return tree.getElementsByTagName("foaf:name")[0].firstChild.nodeValue
+
+def create_user(local_name, launchpad_name=None):
+    if not launchpad_name:
+        launchpad_name = local_name
+
+    # Sanity checking
+    try:
+        pwd.getpwnam(local_name)
+    except:
+        pass
+    else:
+        raise LookupError("%s already exists on your local system" % local_name)
+    if not verify_exists(launchpad_name):
+        raise LookupError("%s does not have a launchpad account" % launchpad_name)
+    try:
+        sshkey = urllib2.urlopen(lp + launchpad_name + "/+sshkeys").read()
+    except:
+        raise LookupError("%s has not yet uploaded his/her SSH key to launchpad" % launchpad_name)
+
+    # Add the user
+    realname = get_realname(launchpad_name)
+    if subprocess.call(["/usr/sbin/adduser",
+                       "--gecos", realname,
+                       "--disabled-password",
+                       local_name]):
+        raise RuntimeError("Could not create user %s" % local_name)
+    user = pwd.getpwnam(local_name)
+    os.mkdir(os.path.join(user.pw_dir, ".ssh"), 0700)
+    os.chown(os.path.join(user.pw_dir, ".ssh"), user.pw_uid, user.pw_gid)
+    fd = os.open(os.path.join(user.pw_dir, ".ssh", "authorized_keys2"), os.O_WRONLY | os.O_CREAT, 0600)
+    os.write(fd, sshkey)
+    os.close(fd)
+    os.chown(os.path.join(user.pw_dir, ".ssh", "authorized_keys2"), user.pw_uid, user.pw_gid)
+
+if __name__ == '__main__':
+    import optparse, sys
+
+    parser = optparse.OptionParser(usage="%prog [options] name\nCreate a local account based on a launchpad.net account")
+    parser.add_option('-l', '--launchpad-name', 
+                      dest="launchpad_name",
+                      default=None,
+                      help="Use this launchpad account",
+                      metavar="NAME")
+    opts, args = parser.parse_args()
+
+    if len(args) != 1:
+        parser.print_help()
+        sys.exit(1)
+
+    if os.geteuid() != 0:
+        print >>sys.stderr, "Only root can add users to the system"
+        sys.exit(1)
+
+    local_name = args[0]
+    launchpad_name = opts.launchpad_name or local_name
+    try:
+        create_user(local_name, launchpad_name)
+    except LookupError, e:
+        print >>sys.stderr, e.message
+        sys.exit(1)
