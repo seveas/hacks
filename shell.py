@@ -61,6 +61,8 @@ except ImportError:
         __slots__ = ()
         def __new__(cls, returncode, stdout, stderr):
             return tuple.__new__(cls, (returncode, stdout, stderr))
+        def __repr__(self):
+            return 'Result' + super(Result, self).__repr__()
         returncode = property(lambda self: self[0])
         stdout = property(lambda self: self[1])
         stderr = property(lambda self: self[2])
