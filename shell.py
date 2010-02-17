@@ -77,8 +77,8 @@ class Shell(object):
     """The magic shell class that finds executables on your $PATH"""
     # Mirror some module-level constants as we expect people to 'from shell
     # import shell'
-    pipe = PIPE
-    stdout = STDOUT
+    PIPE = PIPE
+    STDOUT = STDOUT
 
     def __getattr__(self, name):
         # Real functionality factored out for subclass purposes. super()
@@ -131,7 +131,7 @@ class Command(object):
         self.defer = kwargs.pop('defer', self.defer)
         self.kwargs = kwargs
         if not self.defer:
-            # No need to defer call ourselves
+            # No need to defer, so call ourselves
             sp = subprocess.Popen([str(self.name)] +
                     [str(x) for x in self.args], **(self.kwargs))
             (out, err) = sp.communicate(self.input)
