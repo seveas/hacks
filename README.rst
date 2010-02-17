@@ -19,3 +19,8 @@ A cat that works on fifos (created with mkfifo).
 reset_password
 --------------
 Boot from a live cd and run this to reset all passwords it finds.
+
+shell.py
+--------
+A pythonic version of perls 'use Shell;'. Syntaxtic sugar around subprocess
+that makes creating processes and pipelines even easier.
