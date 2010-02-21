@@ -24,3 +24,8 @@ shell.py
 --------
 A pythonic version of perls 'use Shell;'. Syntaxtic sugar around subprocess
 that makes creating processes and pipelines even easier.
+
+singleton.py
+------------
+Pure-python subclassablie singleton class that uses __new__ instead of the
+usual __init__+impl tkrick, so they are real singletons.
