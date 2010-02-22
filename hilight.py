@@ -53,7 +53,8 @@ def is_highlight(sender, recipient, message):
     wth = [irc_lower(xchat.get_prefs('irc_nick%d' % x) or '') for x in (1,2,3)] + [irc_lower(xchat.get_info('nick'))]
     wth += irc_lower(xchat.get_prefs('irc_extra_hilight') or '').split(', ')
     for w in wth:
-        if w in message:
+        w = w.strip()
+        if w and w in message:
             return True
     return False
 
