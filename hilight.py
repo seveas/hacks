@@ -42,8 +42,6 @@ def is_highlight(sender, recipient, message):
     # Only highlight channels
     if not recipient[0] in '#&@':
         return False
-    if recipient != '#repokit':
-        return False
     # Nicks to never highlight
     nnh = irc_lower(xchat.get_prefs('irc_no_hilight') or '')
     if match_word(sender[:sender.find('!')], nnh.split(',')):
