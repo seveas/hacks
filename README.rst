@@ -3,6 +3,10 @@ Collection of hacks
 
 This is a collection of small hacks I wrote over the years.
 
+hilight.py
+----------
+xchat script that copies all hilighting messages to a /query to yourself
+
 launchpadduser
 --------------
 create local accounts based on launchpad accounts
