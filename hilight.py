@@ -26,7 +26,6 @@ def on_msg(word, word_eol, userdata):
         ctx = xchat.find_context(server=xchat.get_info('server'),channel=xchat.get_info('nick'))
     if message[0] == message[-1] and message[0] == '\x01':
         # CTCP. Only honor CTCP action aka /me
-        print message[1:7]
         if message[1:7].lower() != 'action':
             return xchat.EAT_NONE
         ctx.emit_print('Channel Action Hilight', '%s/%s' % (sender[:sender.find('!')], recipient), message[8:-1], '')
