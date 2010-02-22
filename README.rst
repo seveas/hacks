@@ -39,3 +39,13 @@ singleton.py
 ------------
 Pure-python subclassablie singleton class that uses __new__ instead of the
 usual __init__+impl tkrick, so they are real singletons.
+
+suid_script_wrapper.c
+---------------------
+When sudo is not available, you can use this to let people run a script as
+another user.
+
+wag.c
+-----
+Poor-mans file watcher. Whenever a file changes, execute an application. Made
+for systems where inotify does not exist.
