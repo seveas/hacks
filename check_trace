@@ -1,0 +1,141 @@
+#!/usr/bin/perl
+#
+# check_trace plugin for nagios
+# 
+# This plugins checks whether a hostname resolves to the address you expect
+# it to. It uses dig +trace to check the entire path, from the root
+# nameservers to your domain
+#
+# See check_trace -h for usage information
+# (c)2008 Dennis Kaarsemaker - Licensed under GNU GPL v3 or later
+
+use strict;
+use warnings;
+
+sub print_help ();
+sub _usage ();
+sub in ($$);
+
+use Getopt::Long;
+
+use lib '/usr/lib/nagios/plugins';
+use lib '/usr/lib64/nagios/plugins';
+use utils qw(%ERRORS $TIMEOUT &print_revision &usage);
+
+our ($progname, $progversion);
+my ($opt_h, $opt_A, $opt_V);
+my ($verbose, $host, $address, @addresses, @found_addresses, $cnames);
+
+$progname = "check_trace";
+$progversion = "1.1";
+$cnames = 5;
+
+
+# Parse options
+Getopt::Long::Configure('bundling');
+GetOptions(
+    "V"   => \$opt_V,   "version"   => \$opt_V,
+    "h"   => \$opt_h,   "help"      => \$opt_h,
+    "H=s" => \$host,    "hostname"  => \$host,
+    "a=s" => \$address, "address"   => \$address,
+    "A=s" => \$opt_A,   "addresses" => \$opt_A,
+    "v"   => \$verbose, "verbose"   => \$verbose,
+    "c"   => \$cnames,  "cnames"    => \$cnames,
+);
+
+if ($opt_h) { print_help(); exit $ERRORS{"OK"}; }
+if ($opt_V) { print_revision($progname, $progversion); exit $ERRORS{"OK"}; } 
+@addresses = ();
+@addresses = split(/,/, $opt_A) if(defined($opt_A));
+push(@addresses, $address);
+
+usage(_usage) unless $host;
+usage(_usage) unless $address;
+
+# Trace the hostname
+my $orig_host = $host;
+$host .= '.' unless $host =~ /\.$/;
+my @ns_trace = ();
+my $cname_count = 0;
+
+while($cname_count <= $cnames) {
+    my $cname = undef;
+    print "*** Searching $host\n" if $verbose;
+    open(DIG, '-|', "dig +time=$TIMEOUT +trace $host");
+    while(<DIG>) {
+        print if $verbose;
+        # ;; Received 427 bytes from 192.33.4.12#53(C.ROOT-SERVERS.NET) in 24 ms
+        if(/^;; Received.*?\((.*?)\)./) {
+            push(@ns_trace, $1);
+        }
+        # foo.example.com.  86400   IN  CNAME   bar.example.com.
+        if(/$host\s+\d+\s+IN\s+CNAME\s+(.*)/) {
+            $cname = sprintf('%s CNAME %s', $host, $1);
+            $host = $1;
+        }
+        # bar.example.com. 300 IN  A   127.0.0.1
+        if(/$host\s+\d+\s+IN\s+A\s+(.*)/) {
+            push(@found_addresses, $1);
+        }
+    }
+    last if not defined($cname);
+    last if @found_addresses;
+    push(@ns_trace, $cname);
+    $cname_count++;
+}
+
+# So, did it work?
+if($cname_count == $cnames) {
+    print "Need to follow too many cnames (more than $cnames) to resolve address";
+    exit($ERRORS{"CRITICAL"});
+}
+
+my @errors;
+foreach my $address (@addresses) {
+    if(!in(\@found_addresses, $address)) {
+       push(@errors,"$orig_host did not resolve to $address");
+    }
+}
+foreach my $address (@found_addresses) {
+    if(!in(\@addresses, $address)) {
+        push(@errors, "$orig_host resolved to $address");
+    }
+}
+if(@errors) {
+    print join(', ', @errors);
+    exit $ERRORS{"CRITICAL"};
+}
+print "$orig_host resolved to ".join(', ', @addresses)." via ".join(', ', @ns_trace);
+exit $ERRORS{"OK"};
+
+sub print_help() {
+    print_revision($progname, $progversion);
+    print "\n" .
+    _usage .
+    "\n" .
+    "-H|--hostname hostname to resolve\n" .
+    "-a|--address address it resolves to\n" .
+    "-A|--addresses extra addresses it can resolve to (round robin)\n" .
+    "-c|--cnames max. number of CNAME's to follow\n" .
+    "\n" .
+    "The plugin will use dig +trace to trace your hostname. It will\n" .
+    "allso follow CNAME's unless the A answer came in baliwick\n";
+}
+
+sub _usage() {
+    return "Usage:\n$progname -H hostname -a address [-A extra_addresses] -v\n" .
+           "$progname -h|--help\n" .
+           "$progname -V|--version\n"
+}
+
+sub in($$) {
+    my $array_ref = shift;
+    my $test = shift;
+
+    foreach my $element (@{$array_ref}) {
+        if ($test eq $element) {
+            return 1;
+        }
+    }
+    return 0;
+}
