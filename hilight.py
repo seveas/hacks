@@ -7,11 +7,12 @@ import string
 import xchat
 
 __module_name__ = "hilight"
-__module_version__ = "0.1"
-__module_description__ = "Log highlighting messages to a /query to self"
+__module_version__ = "0.2"
+__module_description__ = "Log highlighting messages to a special tab"
 
 rfc2812_tolower = string.maketrans('[]\\~','{}|^')
 irc_lower = lambda txt: txt.lower().translate(rfc2812_tolower)
+hilight_query_name = u'Hilights'
 
 def on_msg(word, word_eol, userdata):
     sender=word[0][1:]
@@ -19,11 +20,11 @@ def on_msg(word, word_eol, userdata):
     message=word_eol[3][1:]
     if not is_highlight(sender, recipient, message):
         return xchat.EAT_NONE
-    ctx = xchat.find_context(server=xchat.get_info('server'),channel=xchat.get_info('nick'))
+    ctx = xchat.find_context(server=xchat.get_info('server'),channel=hilight_query_name)
     if not ctx:
         # Open a query if it isn't there yet
-        xchat.command('query -nofocus %s' % xchat.get_info('nick'))
-        ctx = xchat.find_context(server=xchat.get_info('server'),channel=xchat.get_info('nick'))
+        xchat.command('query -nofocus %s' % hilight_query_name)
+        ctx = xchat.find_context(server=xchat.get_info('server'),channel=hilight_query_name)
     if message[0] == message[-1] and message[0] == '\x01':
         # CTCP. Only honor CTCP action aka /me
         if message[1:7].lower() != 'action':
