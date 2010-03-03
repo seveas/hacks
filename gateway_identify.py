@@ -1,3 +1,4 @@
+import dns.exception
 import dns.resolver
 import dns.reversename
 import re
@@ -20,10 +21,9 @@ def identify_gateway(word, word_eol, userdata):
         return
     channel = word[-1][1:]
     ip = make_ip(ident[-8:])
-    print ip
     try:
         host = dns.resolver.query(dns.reversename.from_address(ip), 'PTR').response.answer[0][0].to_text()[:-1]
-    except dns.resolver.NXDOMAIN:
+    except (dns.resolver.NXDOMAIN, dns.exception.Timeout):
         host = 'unknown hostname'
     xchat.find_context(channel=channel).emit_print('Server Notice', "%s is coming from %s (%s)" % (nick, ip, host))
 xchat.hook_server('JOIN', identify_gateway, priority=xchat.PRI_LOWEST)
