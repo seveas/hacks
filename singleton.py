@@ -1,3 +1,7 @@
+import threading
+
+__all__ = ['Singleton']
+
 class Singleton(object):
     """Classes inheriting from Singleton will be singletons. Only one instance
        will ever exist. When creating a second instance, the __init__ method is
@@ -11,31 +15,32 @@ class Singleton(object):
     def __new__(cls, *args, **kwargs):
         """Check whether an instance has already been created. If not, create
            it. If it is, disable __init__ and return the first instance"""
-        if cls.__singleton is None:
-            # Create the singleton object once
-            cls.__singleton = super(Singleton, cls).__new__(cls)
-        elif not isinstance(cls.__singleton, cls):
-            # This must be a subclass of a singleton subclass. Create it properly.
-            # Temporarily restore __init__ of the base class so it runs once
-            # for the subclass.
-            if cls.__orig_init_code:
-                cls.__singleton.__class__.__init__.__func__.__code__ = cls.__orig_init_code
-                cls.__singleton.__class__.__orig_init_code = None
-            elif cls.__orig_init:
-                cls.__singleton.__class__.__init__ = cls.__orig_init
-                cls.__singleton.__class__.__orig_init = None
-            # Create the singleton object once
-            cls.__singleton = super(Singleton, cls).__new__(cls)
-        elif not cls.__orig_init_code and not cls.__orig_init:
-            # Disable the __init__ method at the second instantiation by
-            # replacing its __code__. This way the __doc__ etc. stay intact
-            if hasattr(cls.__init__, '__func__'):
-                cls.__orig_init_code = cls.__init__.__func__.__code__
-                cls.__init__.__func__.__code__ = (lambda *args, **kwargs: None).__code__
-            else:
-                # Must be a wrapper. We have no choice but to disable it completely
-                cls.__orig_init =cls.__init__
-                cls.__init__ = lambda *args, **kwargs: None
+        with threading.RLock():
+            if cls.__singleton is None:
+                # Create the singleton object once
+                cls.__singleton = super(Singleton, cls).__new__(cls)
+            elif not isinstance(cls.__singleton, cls):
+                # This must be a subclass of a singleton subclass. Create it properly.
+                # Temporarily restore __init__ of the base class so it runs once
+                # for the subclass.
+                if cls.__orig_init_code:
+                    cls.__singleton.__class__.__init__.__func__.__code__ = cls.__orig_init_code
+                    cls.__singleton.__class__.__orig_init_code = None
+                elif cls.__orig_init:
+                    cls.__singleton.__class__.__init__ = cls.__orig_init
+                    cls.__singleton.__class__.__orig_init = None
+                # Create the singleton object once
+                cls.__singleton = super(Singleton, cls).__new__(cls)
+            elif not cls.__orig_init_code and not cls.__orig_init:
+                # Disable the __init__ method at the second instantiation by
+                # replacing its __code__. This way the __doc__ etc. stay intact
+                if hasattr(cls.__init__, '__func__'):
+                    cls.__orig_init_code = cls.__init__.__func__.__code__
+                    cls.__init__.__func__.__code__ = (lambda *args, **kwargs: None).__code__
+                else:
+                    # Must be a wrapper. We have no choice but to disable it completely
+                    cls.__orig_init =cls.__init__
+                    cls.__init__ = lambda *args, **kwargs: None
 
         return cls.__singleton
 
