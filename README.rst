@@ -9,6 +9,11 @@ Nagios plugin to resolve a check whether a hostname is fully resolvable, from
 the root nameservers down to the authoritative nameserver for the domain. On
 more than one occasion, SIDN broke the .nl zone, making this check useful.
 
+deletepassphrases
+-----------------
+Make networkmanager forget passwords immediately after authenticating. This
+really should be a feature in n-m itself but sadly isn't.
+
 gateway_identify.py
 -------------------
 xchat script that prints the IP address/hostname of users connecting from a
