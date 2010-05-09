@@ -59,3 +59,7 @@ wag.c
 -----
 Poor-mans file watcher. Whenever a file changes, execute an application. Made
 for systems where inotify does not exist.
+
+wallpaper.py
+------------
+Random wallpaper grabber & changer. Supports only interfacelift.com for now
