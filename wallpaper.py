@@ -5,6 +5,7 @@
 #
 # (c) 2010 Dennis Kaarsemaker
 
+import glob
 import os
 import random
 import re
@@ -44,10 +45,16 @@ def import_env(find_exe):
         sys.exit(1)
 
 class InterfaceLift(object):
-    def download(self, resolution):
-        page = self.random_page()
-        id_name = self.random_image(page)
-        path = self.download_image(id_name, resolution)
+    def update(self, resolution):
+        try:
+            page = self.random_page()
+            id_name = self.random_image(page)
+            path = self.download_image(id_name, resolution)
+        except urllib2.URLError: # Not online?
+            pictures = glob.glob(os.path.join(DOWNLOAD_PATH, '*_%s.*' % resolution))
+            if not pictures:
+                return None
+            return random.choice(pictures)
         return path
 
     def random_page(self):
@@ -74,8 +81,10 @@ class InterfaceLift(object):
 def main():
     resolution = get_resolution()
     klass = InterfaceLift # In the future there could be more classes
-    path = klass().download(resolution)
-    set_background(path)
+    path = klass().update(resolution)
+    print repr(path)
+    if path:
+        set_background(path)
 
 if __name__ == '__main__':
     import_env('/usr/bin/nautilus')
