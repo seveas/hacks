@@ -159,7 +159,7 @@ int main(int argc, char **argv) {
         return ret | 128;
 
     #if TAKE_ARGV
-    char **new_argv = (char**)malloc(argc+2 * sizeof(char*));
+    char **new_argv = (char**)malloc((argc+2) * sizeof(char*));
     int i = 1;
     new_argv[0] = interpreter_path;
     new_argv[1] = script_path;
