@@ -11,10 +11,11 @@ import os
 from PIL import Image
 import random
 import re
+import stat
 import subprocess
 import urllib2
 
-DOWNLOAD_PATH = os.path.expanduser('~/Pictures')
+DOWNLOAD_PATH = '/home/dennis/Pictures'
 INDEX = "http://interfacelift.com/wallpaper_beta/downloads/date/any/"
 DOWNLOAD_BASE = "http://interfacelift.com/wallpaper_beta/grab/"
 GCONF_KEY = "/desktop/gnome/background/picture_filename"
@@ -27,6 +28,13 @@ def get_resolution():
 def set_background(path):
     # Lazy!
     subprocess.call(["gconftool-2", "--set", GCONF_KEY, "--type", "string", path])
+
+def set_gdm_background(path):
+    from gdm2.gdm2gconf import GDM2Theme as gt
+    gt = gt()
+    gt.DEBUG = False
+    gt.SetWallpaper(path, False)
+
 
 def import_env(find_exe):
     for d in os.listdir('/proc'):
@@ -86,13 +94,15 @@ class InterfaceLift(object):
         return dpath
 
 def main():
+    uid = import_env('/usr/bin/nautilus')
     resolution = get_resolution()
     klass = InterfaceLift # In the future there could be more classes
     path = klass().update(resolution)
-    print repr(path)
     if path:
+        if os.geteuid() == 0:
+            set_gdm_background(path)
+            os.setuid(uid)
         set_background(path)
 
 if __name__ == '__main__':
-    import_env('/usr/bin/nautilus')
     main()
