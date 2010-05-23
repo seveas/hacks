@@ -5,8 +5,10 @@
 #
 # (c) 2010 Dennis Kaarsemaker
 
+import cStringIO as stringio
 import glob
 import os
+from PIL import Image
 import random
 import re
 import subprocess
@@ -36,26 +38,30 @@ def import_env(find_exe):
         except OSError:
             continue
         if exe == find_exe:
+            uid = os.stat(d)[stat.ST_UID]
             env = open(os.path.join(d, 'environ')).read()
             env = dict([x.split('=', 1) for x in env.split('\x00') if x])
             os.environ.update(env)
-            break
+            return uid
     else:
         print "Process %s not running" % find_exe
         sys.exit(1)
 
 class InterfaceLift(object):
     def update(self, resolution):
-        try:
-            page = self.random_page()
-            id_name = self.random_image(page)
-            path = self.download_image(id_name, resolution)
-        except urllib2.URLError: # Not online?
-            pictures = glob.glob(os.path.join(DOWNLOAD_PATH, '*_%s.*' % resolution))
-            if not pictures:
-                return None
-            return random.choice(pictures)
-        return path
+        for i in range(5):
+            try:
+                page = self.random_page()
+                id_name = self.random_image(page)
+                return self.download_image(id_name, resolution)
+            except IOError: # Bad image
+                continue
+            except urllib2.URLError: # Not online?
+                break
+        pictures = glob.glob(os.path.join(DOWNLOAD_PATH, '*_%s.*' % resolution))
+        if not pictures:
+            return None
+        return random.choice(pictures)
 
     def random_page(self):
         html = urllib2.urlopen(INDEX).read()
@@ -74,6 +80,7 @@ class InterfaceLift(object):
         dpath = os.path.join(DOWNLOAD_PATH, name)
         if not os.path.exists(dpath):
             img = urllib2.urlopen(DOWNLOAD_BASE + name).read()
+            Image.open(stringio.StringIO(img))
             with open(dpath, 'w') as fd:
                 fd.write(img)
         return dpath
