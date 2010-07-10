@@ -1,0 +1,447 @@
+#!/usr/bin/python
+#
+# European/Dutch weather (rain and lightning) radar.
+#
+# This small application will display the dutch weather radar data provided by
+# buienradar.nl and meteox.nl. It offers a choice between 1, 2, 3, 6, 12 and 24
+# hour loops loops can be paused and navigated as well.
+#
+# (c)2009 Dennis Kaarsemaker <dennis@kaarsemaker.net> This is free software,
+# licensed under the GNU GPL, version 3 or later.
+#
+# Downloaded data is (c) buienradar.nl/meteox.nl, all rights reserved.
+
+import datetime
+import logging
+import math
+import os
+import pygtk; pygtk.require('2.0'); import gtk, glib
+import sys
+import urllib2
+
+__version__ = (1,0,2)
+
+class BuienRadar(object):
+    """BuienRadar GUI, display dutch weather radar images"""
+
+    cache_dir = os.path.join(os.path.expanduser('~'), '.cache', 'buienradar')
+    br_nl_url = 'http://www6.buienradar.nl/images.aspx?soort=1x1&bliksem=1' + \
+                '&jaar=%(year)d' + \
+                '&maand=%(month)02d' + \
+                '&dag=%(day)02d' + \
+                '&uur=%(hour)02d' + \
+                '&minuut=%(minute)02d'
+    br_eu_url = 'http://www.meteox.nl/images.aspx?lightning=1' + \
+                '&jaar=%(year)d' + \
+                '&maand=%(month)02d' + \
+                '&dag=%(day)02d' + \
+                '&uur=%(hour)02d' + \
+                '&minuut=%(minute)02d'
+
+    def __init__(self, dutch, loglevel):
+        """Initialize the GUI and internal data"""
+
+        # Not playing yet
+        self.last_step = 0
+        self.playing = False
+        self.downloading = None
+
+        # Which radar images?
+        self.set_dutch(dutch=dutch)
+
+        # Logging
+        self.init_logger(loglevel)
+
+        # The window 
+        self.window = w = gtk.Window(gtk.WINDOW_TOPLEVEL)
+        w.set_title("Weather radar %s" % '.'.join(str(x) for x in __version__))
+        w.connect("delete_event", self.quit)
+        w.connect("destroy", self.quit)
+        w.set_icon(logo)
+        w.set_resizable(False)
+
+        vbox = gtk.VBox()
+        w.add(vbox)
+
+        # Menubar
+        mb = gtk.MenuBar()
+        vbox.pack_start(mb, expand=False)
+        fmi = gtk.MenuItem(label="Weather radar")
+        mb.append(fmi)
+        fm = gtk.Menu()
+        fmi.set_submenu(fm)
+
+        it = gtk.MenuItem("Europe")
+        it.connect("activate", self.set_dutch, False)
+        fm.append(it)
+
+        it = gtk.MenuItem("The Netherlands")
+        it.connect("activate", self.set_dutch, True)
+        fm.append(it)
+
+        it = gtk.MenuItem("Clear cache")
+        it.connect("activate", self.clear_cache, 0)
+        fm.append(it)
+
+        it = gtk.ImageMenuItem(gtk.STOCK_QUIT)
+        it.connect("activate", self.quit)
+        fm.append(it)
+
+        # Player interface
+        hbox = gtk.HBox()
+        vbox.pack_start(hbox, expand=False)
+
+        b = gtk.combo_box_new_text()
+        hbox.pack_start(b,expand=False)
+        for i in (1, 2, 3, 6, 12, 24):
+            b.append_text('%d hour' % i)
+        b.set_active(2)
+        self.set_seconds(seconds=10800)
+        b.connect('changed', self.set_seconds)
+
+        self.playbutton = b = gtk.Button(stock=gtk.STOCK_MEDIA_PLAY)
+        b.set_use_stock(True)
+        b.connect("clicked", self.toggle_playing)
+        hbox.pack_start(b,expand=False)
+
+        self.scale = s = gtk.HScale()
+        hbox.pack_start(s)
+        s.set_draw_value(False)
+        s.set_range(0,1)
+        s.connect('change-value', self.adjust_slider)
+        s.connect('button-press-event', self.pause_playing)
+        s.connect('button-release-event', self.resume_playing)
+        self.paused = False
+        self.last_manual = None
+
+        # The image
+        self.image = gtk.Image()
+        vbox.pack_start(self.image)
+        self.images = {}
+
+        # Statusbar
+        self.statusbar = sb = gtk.Statusbar()
+        vbox.pack_start(sb, expand=False)
+        sb.set_has_resize_grip(False)
+
+        # Make sure we can store our images
+        if not os.path.exists(self.cache_dir):
+            os.makedirs(self.cache_dir)
+
+    def main(self):
+        """Show the gui and run the mainloop. Also start the player"""
+        self.window.show_all()
+        glib.idle_add(self.start_playing)
+        glib.timeout_add(900000, self.clear_cache)
+        gtk.main()
+
+    def quit(self, eventsrc, *args):
+        """Quit the mainloop"""
+        gtk.main_quit()
+
+
+    # Player control
+    # start/stop and pause/resume are very similar, the difference is in what
+    # calls them:
+    # - start/stop are callbacks for the plau/pause button
+    # - pause/resume are called when the slider is being dragged. Animation
+    #   will continue when the slider is let go
+
+    def start_playing(self):
+        """Start the animation"""
+        if self.playing:
+            return
+        self.playing = True
+        self.playbutton.set_label(gtk.STOCK_MEDIA_PAUSE)
+        self.timer = glib.timeout_add(self.timeout, self.play_step)
+
+    def stop_playing(self):
+        """Stop the animation"""
+        if not self.playing:
+            return
+        glib.source_remove(self.timer)
+        self.playbutton.set_label(gtk.STOCK_MEDIA_PLAY)
+        self.playing = False
+
+    def pause_playing(self, eventsrc, event):
+        """Pause the animation"""
+        if self.playing and not self.paused:
+            self.stop_playing()
+            self.paused = True
+
+    def resume_playing(self, eventsrc, event):
+        """Continue the animation"""
+        if self.paused and not self.playing:
+            if self.last_manual:
+                glib.source_remove(self.last_manual)
+                self.last_manual = None
+            self.start_playing()
+            self.paused = False
+
+    # GUI response
+
+    def toggle_playing(self, eventsrc):
+        """Callback for the plau/payse button"""
+        if self.playing:
+            self.stop_playing()
+        else:
+            self.start_playing()
+
+    def adjust_slider(self, eventsrc, scrolltype, value):
+        """Callback for when the slider is moved"""
+        if self.last_manual:
+            glib.source_remove(self.last_manual)
+            self.last_manual = None
+        if self.playing:
+            return
+        step = int(self.steps * (1-value))
+        self.last_step = step + 1
+        # Use a timeout so we don't update the screen to often
+        self.last_manual = glib.timeout_add(50, self.play_step, False)
+
+    def set_seconds(self, eventsrc=None, seconds=0):
+        """Callback for the dropdown duration selector"""
+        if eventsrc:
+            t = eventsrc.get_active_text()
+            self.seconds = int(t.split(None,1)[0]) * 3600
+        else:
+            self.seconds = seconds
+        self.steps = self.seconds/self.interval
+        if self.last_step > self.steps:
+            self.last_step = self.steps
+        self.set_timeout(12000/self.steps)
+
+    # Player/display functions
+
+    def play_step(self, set_scale=True):
+        """Advance the step counter and load the relevant image"""
+        self.logger.info("Playing step: %d/%d" % (self.last_step, self.steps))
+        if self.last_step == 0:
+            self.cycle_time = self.load_image(datetime.datetime.now())
+            self.last_step = self.steps
+        else:
+            self.last_step -= 1
+        self.load_image(self.cycle_time - datetime.timedelta(0, self.interval * self.last_step))
+        if set_scale:
+            self.scale.set_value(1-(0.0+self.last_step)/self.steps)
+        return self.playing
+
+    def set_timeout(self, timeout):
+        """Set the time between frames and restart the player"""
+        self.timeout = timeout = max(100, timeout) # Timeout must be 100ms minimum
+        # 1001 is a magic value, it means we are downloading images. Tell the user 
+        if self.timeout == 1001 and not self.downloading:
+            self.downloading = self.statusbar.push(1, "Slowing down animation to download images")
+        elif self.downloading is not None:
+            if hasattr(self.statusbar, 'remove_message'):
+                self.statusbar.remove_message(1, self.downloading)
+            elif hasattr(self.statusbar, 'remove'):
+                self.statusbar.remove(1, self.downloading)
+            self.downloading = None
+        if self.playing:
+            self.stop_playing()
+            self.start_playing()
+
+    def clamped_timestamp(self, timestamp):
+        """Returns the timestamp with second/microsecond set to 0 and minute to minute % self.interval"""
+        return timestamp - datetime.timedelta(0, (timestamp.minute * 60 + timestamp.second) % self.interval, timestamp.microsecond)
+
+    def load_image(self, timestamp):
+        """Load the relevant image for the timestamp. Will try to download images and
+           will also try to download older images if the current one is not yet 
+           available. Return value is the timestamp for the image actually loaded.
+           This may differ trom the timestamp argument."""
+        timestamp = self.clamped_timestamp(timestamp)
+
+        # Too old. Paused for too long? Restart the animation by resetting
+        # the step counter.
+        if timestamp < datetime.datetime.now() - datetime.timedelta(1,1800):
+            self.last_step = 0
+            return
+
+        # Have we cached this image in memory?
+        if (timestamp, self.postfix) in self.images:
+            # Unset the magic "We're downloading" timeout
+            if self.timeout == 1001 and self.last_step > 2:
+                self.set_timeout(12000/self.steps)
+            self.image.set_from_pixbuf(self.images[(timestamp, self.postfix)])
+            return timestamp
+        imgfile = os.path.join(self.cache_dir, timestamp.strftime('%Y%m%d%H%M') + self.postfix + '.gif')
+
+        self.logger.info("Loading %s" % imgfile)
+
+        # Have we cached this image on disk?
+        if os.path.exists(imgfile):
+            # Unset the magic "We're downloading" timeout
+            if self.timeout == 1001 and self.last_step > 2:
+                self.set_timeout(12000/self.steps)
+        else:
+            # Set the magic "We're downloading" timeout
+            if self.last_step > 2 and self.timeout != 1001:
+                self.set_timeout(1001)
+            url = self.url % {'year': timestamp.year,
+                              'month': timestamp.month,
+                              'day': timestamp.day,
+                              'hour': timestamp.hour,
+                              'minute': timestamp.minute}
+            self.logger.debug("Downloading %s" % url)
+            try:
+                req = urllib2.urlopen(url)
+            except urllib2.URLError:
+                # Failed to download image
+                self.stop_playing()
+                error_dlg = gtk.MessageDialog(type=gtk.MESSAGE_ERROR, buttons=gtk.BUTTONS_OK,
+                                              parent=self.window,
+                                              message_format="Failed to download image. Check your internet connection and proxy settings")
+                error_dlg.run()
+                error_dlg.destroy()
+                raise
+                sys.exit(1)
+            img = req.read()
+            if len(img) < 1000:
+                # Image does not exist yet, try a 5 minute older one
+                self.logger.debug("Download failed for %s" % url)
+                return self.load_image(timestamp - datetime.timedelta(0, self.interval))
+            # Cache the image 
+            fd = open(imgfile, 'w')
+            fd.write(img)
+            fd.close()
+
+        # Load the cached image from disk
+        try:
+            self.images[(timestamp, self.postfix)] = gtk.gdk.pixbuf_new_from_file(imgfile)
+        except glib.GError:
+            self.logger.warning("Unable to load %s, re-downloading" % imgfile)
+            os.unlink(imgfile)
+            return self.load_image(timestamp)
+        self.images[(timestamp, self.postfix)].saturate_and_pixelate(self.images[(timestamp, self.postfix)], self.saturation(timestamp), False)
+        self.image.set_from_pixbuf(self.images[(timestamp, self.postfix)])
+        return timestamp
+
+    # Other functions
+
+    def init_logger(self, level):
+        self.logger = l = logging.getLogger("buienradar")
+        l.setLevel(level=level)
+        c = logging.StreamHandler()
+        c.setLevel(level=level)
+        c.setFormatter(logging.Formatter("%(asctime)s - %(message)s"))
+        l.addHandler(c)
+
+    def set_dutch(self, eventsrc=None, dutch=False):
+        self.url = dutch and self.br_nl_url or self.br_eu_url
+        self.postfix = dutch and '_nl' or '_eu'
+        self.interval = dutch and 300 or 900
+        if hasattr(self, 'seconds'):
+            self.steps = self.seconds/self.interval
+            self.set_timeout(12000/self.steps)
+
+    saturation_factor = 0.25
+    saturation_base = 1 - saturation_factor
+    saturation_offset = 1.0 / 12
+    def saturation(self, timestamp):
+        """Return the saturation for the time, making images darker or not.
+           Currently this is a naive cosine with a 2h offset making 02:00
+           the darkest and 14:00 the lightest"""
+        ts = (timestamp.hour * 60.0 + timestamp.minute) / 1440.0 - self.saturation_offset
+        sat = self.saturation_base - self.saturation_factor * math.cos(ts * 2.0 * math.pi)
+        self.logger.debug("Saturation for %s: %f" % (timestamp.strftime("%H:%M"), sat))
+        return sat
+
+    def clear_cache(self, eventsrc, age=87300):
+        """Remove all downloaded image files and clean the memory cache"""
+        max_age = datetime.datetime.now() - datetime.timedelta(0, age)
+        max_age_str = max_age.strftime('%Y%m%d%H%M')
+        for f in os.listdir(self.cache_dir):
+            if f < max_age_str:
+                self.logger.info("Deleting %s" % f)
+                os.unlink(os.path.join(self.cache_dir, f))
+        for k in self.images.keys():
+            if k < max_age:
+                self.logger.debug("Forgetting image for %s" % k.strftime("%Y-%m-%d %H:%M"))
+                del self.images[k]
+
+        # This is called from a timeout_add, so return True to keep the
+        # loop alive.
+        return True
+
+# http://www.buienradar.nl/favicon.ico converted to xpm with imagemagick
+# $ wget -O- http://www.buienradar.nl/favicon.ico
+# $ convert -format xpm favicon.ico favicon.xpm
+# $ cat favicon.xpm
+logo = gtk.gdk.pixbuf_new_from_xpm_data([
+    "16 16 181 2",
+    "   c #3163AD", ".  c #3264AD", "X  c #3364AD", "o  c #3365AD", "O  c #3365AE",
+    "+  c #3465AD", "@  c #3466AD", "#  c #3567AD", "$  c #3465AE", "%  c #3466AE",
+    "&  c #3566AE", "*  c #3667AF", "=  c #3768AE", "-  c #396BAD", ";  c #3869AE",
+    ":  c #3A6CAD", ">  c #3D6EAF", ",  c #386AB0", "<  c #3B6DB0", "1  c #3C6CB0",
+    "2  c #3C6CB1", "3  c #3D6CB1", "4  c #3F6DB0", "5  c #406FB3", "6  c #4070B0",
+    "7  c #4171B0", "8  c #4271B1", "9  c #4170B3", "0  c #4370B3", "q  c #4471B3",
+    "w  c #4772B6", "e  c #4B77B5", "r  c #4C77B5", "t  c #4A78B4", "y  c #4B79B4",
+    "u  c #4B79B5", "i  c #4C7AB6", "p  c #4E7BB6", "a  c #4F7BB6", "s  c #4F7AB7",
+    "d  c #4D7AB9", "f  c #507BB9", "g  c #527EB9", "h  c #517DBA", "j  c #547FBA",
+    "k  c #5D84BC", "l  c #5F85BD", "z  c #5F87BD", "x  c #5D86BF", "c  c #6089BF",
+    "v  c #658DC0", "b  c #678DC0", "n  c #688DC3", "m  c #6991C6", "M  c #7297C7",
+    "N  c #799AC7", "B  c #7C9BC7", "V  c #7B9BC8", "C  c #7A9CC9", "Z  c #7A9CCB",
+    "A  c #7C9EC9", "S  c #7C9DCC", "D  c #7F9ECD", "F  c #7DA5D6", "G  c #7EA7D7",
+    "H  c #80A2CB", "J  c #81A0CC", "K  c #84A4CD", "L  c #87A5CD", "P  c #89A6CF",
+    "I  c #8EADCF", "U  c #82A5D6", "Y  c #83A6D6", "T  c #8CA6D2", "R  c #83A8D7",
+    "E  c #87A8D7", "W  c #81A7D8", "Q  c #85ABD8", "!  c #89AAD9", "~  c #8AABD9",
+    "^  c #8AADD8", "/  c #8BADDD", "(  c #91ABD2", ")  c #90ADDA", "_  c #89B0D8",
+    "`  c #8DB0D9", "'  c #94B3D5", "]  c #98B3D6", "[  c #91B5DB", "{  c #92B1DC",
+    "}  c #97B5DC", "|  c #95B5DE", " . c #9BB6DA", ".. c #9CB5D8", "X. c #9AB8DE",
+    "o. c #9DB9DE", "O. c #A0B7D8", "+. c #A4BDD9", "@. c #A2BDDF", "#. c #A3BDDF",
+    "$. c #A5BCDC", "%. c #98B4E0", "&. c #A2BBE1", "*. c #AAC2DD", "=. c #A3C1E0",
+    "-. c #A8C1E1", ";. c #AAC0E0", ":. c #ADC2E0", ">. c #AEC6E3", ",. c #A9C3E5",
+    "<. c #B4C6E1", "1. c #B2C6E5", "2. c #B4C7E5", "3. c #B5C9E5", "4. c #B5C8E6",
+    "5. c #B5CBE7", "6. c #B9CCE5", "7. c #BACDE5", "8. c #B8CEE6", "9. c #BCCFE6",
+    "0. c #BDCFE7", "q. c #BECFE8", "w. c #BDCFEB", "e. c #BBD0EB", "r. c #BDD1E9",
+    "t. c #BED2E9", "y. c #BED1EA", "u. c #C2D1E7", "i. c #C0D2E7", "p. c #C3D2EA",
+    "a. c #C3D6EB", "s. c #C7D6E9", "d. c #C6D4EA", "f. c #C6D5EC", "g. c #C5D4EE",
+    "h. c #C9D7EE", "j. c #CCD7EC", "k. c #CAD8EB", "l. c #CCD8EB", "z. c #CCDAED",
+    "x. c #CED9EF", "c. c #CFDAEE", "v. c #CEDCEC", "b. c #CEDDED", "n. c #D1DBEE",
+    "m. c #D0DBEF", "M. c #D1DDEE", "N. c #D3DDEF", "B. c #D0DEEE", "V. c #D2DEEF",
+    "C. c #CCDAF0", "Z. c #D2DFF1", "A. c #D3DEF2", "S. c #D4DEF0", "D. c #D6E3F2",
+    "F. c #D9E2F3", "G. c #DBE2F2", "H. c #DCE2F0", "J. c #DAE7F1", "K. c #D9E6F3",
+    "L. c #DAE6F3", "P. c #D9E2F4", "I. c #E0E6F3", "U. c #E4EEF5", "Y. c #E5EDF7",
+    "T. c #EBEFF7", "R. c #EEEFF7", "E. c #E0EDF8", "W. c #E6F0F5", "Q. c #EBF4F7",
+    "!. c #EDF5F7", "~. c #EFF2FB", "^. c #F5F5FA", "/. c #F6F6FA", "(. c #F3F9F9",
+    "). c #F4F9F9", "_. c #F9F9FF", "`. c #FBFCFE", "'. c #FDFDFE", "]. c #FCFEFE",
+    "[. c gray100",
+
+    "[.[.[.[.[.[.^.T.T./.[.[.[.[.'.R.",
+    "[.[.[.(.9.H k e r l K i.).`.Y.C.",
+    "[.[.I.B p 7 ; X o & d  .~.S.e.Q.",
+    "[.I.b 8 # o .   @ g ..P.g.1.W.].",
+    "(.J 2 o .       x :.Z.8.*.G.E._.",
+    "9.u O       , m 3.m.>.=.z.c.D p.",
+    "A > .     4 Z 0.l.;.o.a.n.S 0 K ",
+    "y : .   4 L u.f.#.} y.v.T 5 & l ",
+    "- # . s ( k.t.X.{ 5.b.] w   $ f ",
+    "- # h O.N.r.[ ^ 2.M.+.j     $ f ",
+    "i c $.A.4.` Q -.V.<.z @     & k ",
+    "' 7.F.,.~ W &.B.6.n @       1 H ",
+    "!.J.@.R U %.x.s.M @       + a q.",
+    "D.| G U ) h.j.C <       . 3 V _.",
+    "/ Y F ! d.H.P 9       @ 6 v K.[.",
+    "_ G E w.U.I t = $ % * q N L.[.[."
+])
+
+if __name__ == '__main__':
+    from optparse import OptionParser
+    parser = OptionParser()
+    parser.add_option('-v', '--verbose', action='count', dest='verbosity',
+                      help="Verbose output (repeat for higher verbosity)")
+    parser.add_option('-e', '--eu', action='store_false', dest='dutch', default=False,
+                      help="Use european radar (default)")
+    parser.add_option('-n', '--nl', action='store_true', dest='dutch', default=False,
+                      help="Use dutch radar")
+    options, args = parser.parse_args()
+    if args:
+        parser.print_help()
+        sys.exit(1)
+    level = {1: logging.INFO, 2: logging.DEBUG}.get(options.verbosity, logging.WARNING)
+    BuienRadar(options.dutch, level).main()
+
+# `Now you see it,' said the bird. `Now you don't.'
+# - Douglas Adams, Mostly Harmless
