@@ -125,6 +125,7 @@ class Command(object):
         """Save arguments, execute a subprocess unless we need to be defered"""
         self.args = args
         # When not specified, make sure stdio is coming back to us
+        kwargs['close_fds'] = True
         if kwargs.pop('redirect', True):
             for stream in ('stdin', 'stdout', 'stderr'):
                 if stream not in kwargs:
@@ -154,6 +155,9 @@ class Command(object):
             raise ValueError("Command not chainable or already chained")
         if not hasattr(self, 'args') or not hasattr(other, 'args'):
             raise ValueError("Command not called yet")
+        # Can't chain something with input behind something else
+        if hasattr(other, 'input') and other.input != '':
+            raise ValueError("Cannot chain a command with input")
         # Yes, we can!
         self.next = other
         other.prev = self
@@ -166,7 +170,26 @@ class Command(object):
     def run_pipe(self):
         """Run the last command in the pipe and collect returncodes"""
         sp = subprocess.Popen([str(self.name)] + [str(x) for x in self.args], **(self.kwargs))
-        (out, err) = sp.communicate()
+
+        # Ugly fudging of file descriptors to make communicate() work
+        old_stdin = sp.stdin
+        proc = self.prev
+        input = ''
+        while proc:
+            sp.stdin = proc.sp.stdin
+            input = proc.input
+            if proc.sp.stdout:
+                proc.sp.stdout.close()
+                proc.sp.stdout = None
+            if proc.sp.stderr:
+                proc.sp.stderr.close()
+                proc.sp.stderr = None
+            proc = proc.prev
+
+        (out, err) = sp.communicate(input)
+
+        sp.stdin = old_stdin
+
         returncodes = [sp.returncode]
         proc = self.prev
         while proc:
@@ -267,5 +290,27 @@ if __name__ == '__main__':
             self.assertEqual(r.returncode, 0)
             self.assertEqual(r.stdout, None)
             self.assertEqual(r.stderr, None)
+
+        def test_pipewithinput(self):
+            input = "Hello, world!"
+            r = pipe(
+                pipe.caesar(10, input=input) |
+                pipe.caesar(10) |
+                pipe.caesar(6)
+            )
+            self.assertEqual(r.returncode, [0,0,0])
+            self.assertEqual(r.stdout, input)
+            self.assertEqual(r.stderr, '')
+
+        def test_pipewithhugeinput(self):
+            input = "123456789ABCDEF" * 1024
+            r = pipe(
+                pipe.caesar(10, input=input) |
+                pipe.caesar(10) |
+                pipe.caesar(6)
+            )
+            self.assertEqual(r.returncode, [0,0,0])
+            self.assertEqual(r.stdout, input)
+            self.assertEqual(r.stderr, '')
 
     unittest.main()
