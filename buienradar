@@ -358,12 +358,15 @@ class BuienRadar(object):
         l.addHandler(c)
 
     def set_dutch(self, eventsrc=None, dutch=False):
+        old_url = getattr(self, 'url', None)
         self.url = dutch and self.br_nl_url or self.br_eu_url
         self.postfix = dutch and '_nl' or '_eu'
         self.interval = dutch and 300 or 900
         if hasattr(self, 'seconds'):
             self.steps = self.seconds/self.interval
             self.set_timeout(12000/self.steps)
+        if old_url != self.url and old_url != None and not self.playing:
+            self.play_step()
 
     saturation_factor = 0.25
     saturation_base = 1 - saturation_factor
