@@ -3,11 +3,22 @@ Collection of hacks
 
 This is a collection of small hacks I wrote over the years.
 
+buienradar
+----------
+Tiny PyGTK app that downloads and displays dutch or west-european radarimages
+that show where it rains. Loops over 1-24 hours worth of images and has
+keyboard control
+
 check_trace
 -----------
 Nagios plugin to resolve a check whether a hostname is fully resolvable, from
 the root nameservers down to the authoritative nameserver for the domain. On
 more than one occasion, SIDN broke the .nl zone, making this check useful.
+
+cisco-crypt.py
+--------------
+Python module and standalone script for encrypting/decryptinf cisco-style
+encrypted passwords in .pcf files for the vpn client.
 
 deletepassphrases
 -----------------
@@ -48,7 +59,7 @@ that makes creating processes and pipelines even easier.
 singleton.py
 ------------
 Pure-python subclassablie singleton class that uses __new__ instead of the
-usual __init__+impl tkrick, so they are real singletons.
+usual __init__+impl trick (borg pattern), so they are real singletons.
 
 suid_script_wrapper.c
 ---------------------
