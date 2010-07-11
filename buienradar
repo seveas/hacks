@@ -19,7 +19,7 @@ import pygtk; pygtk.require('2.0'); import gtk, glib
 import sys
 import urllib2
 
-__version__ = (1,0,2)
+__version__ = (1,1,0)
 
 class BuienRadar(object):
     """BuienRadar GUI, display dutch weather radar images"""
