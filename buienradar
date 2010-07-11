@@ -220,7 +220,6 @@ class BuienRadar(object):
 
     def key_release(self, eventsrc, event):
         key = gtk.gdk.keyval_name(event.keyval).lower()
-        print key
         if key == 'p':
             self.toggle_playing(eventsrc)
         elif key == 'n':
