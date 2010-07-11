@@ -37,6 +37,7 @@ class BuienRadar(object):
                 '&dag=%(day)02d' + \
                 '&uur=%(hour)02d' + \
                 '&minuut=%(minute)02d'
+    hour_choices = (1, 2, 3, 6, 12, 24)
 
     def __init__(self, dutch, loglevel):
         """Initialize the GUI and internal data"""
@@ -57,6 +58,7 @@ class BuienRadar(object):
         w.set_title("Weather radar %s" % '.'.join(str(x) for x in __version__))
         w.connect("delete_event", self.quit)
         w.connect("destroy", self.quit)
+        w.connect("key_release_event", self.key_release)
         w.set_icon(logo)
         w.set_resizable(False)
 
@@ -91,9 +93,9 @@ class BuienRadar(object):
         hbox = gtk.HBox()
         vbox.pack_start(hbox, expand=False)
 
-        b = gtk.combo_box_new_text()
+        self.combo_box = b = gtk.combo_box_new_text()
         hbox.pack_start(b,expand=False)
-        for i in (1, 2, 3, 6, 12, 24):
+        for i in self.hour_choices:
             b.append_text('%d hour' % i)
         b.set_active(2)
         self.set_seconds(seconds=10800)
@@ -123,6 +125,8 @@ class BuienRadar(object):
         self.statusbar = sb = gtk.Statusbar()
         vbox.pack_start(sb, expand=False)
         sb.set_has_resize_grip(False)
+
+        self.window.set_focus(None)
 
         # Make sure we can store our images
         if not os.path.exists(self.cache_dir):
@@ -168,6 +172,7 @@ class BuienRadar(object):
         if self.playing and not self.paused:
             self.stop_playing()
             self.paused = True
+        self.window.set_focus(None)
 
     def resume_playing(self, eventsrc, event):
         """Continue the animation"""
@@ -177,6 +182,7 @@ class BuienRadar(object):
                 self.last_manual = None
             self.start_playing()
             self.paused = False
+        self.window.set_focus(None)
 
     # GUI response
 
@@ -198,6 +204,7 @@ class BuienRadar(object):
         self.last_step = step + 1
         # Use a timeout so we don't update the screen to often
         self.last_manual = glib.timeout_add(50, self.play_step, False)
+        self.window.set_focus(None)
 
     def set_seconds(self, eventsrc=None, seconds=0):
         """Callback for the dropdown duration selector"""
@@ -210,6 +217,27 @@ class BuienRadar(object):
         if self.last_step > self.steps:
             self.last_step = self.steps
         self.set_timeout(12000/self.steps)
+
+    def key_release(self, eventsrc, event):
+        key = gtk.gdk.keyval_name(event.keyval).lower()
+        print key
+        if key == 'p':
+            self.toggle_playing(eventsrc)
+        elif key == 'n':
+            self.set_dutch(dutch=True)
+        elif key == 'e':
+            self.set_dutch(dutch=False)
+        elif key == 'left':
+            self.stop_playing()
+            self.last_step = (self.last_step+2) % (self.steps+1)
+            self.play_step()
+        elif key == 'right':
+            self.stop_playing()
+            self.play_step()
+        elif key.isdigit() and int(key) in self.hour_choices:
+            key = int(key)
+            self.set_seconds(seconds = key * 3600)
+            self.combo_box.set_active(self.hour_choices.index(key))
 
     # Player/display functions
 
@@ -224,6 +252,7 @@ class BuienRadar(object):
         self.load_image(self.cycle_time - datetime.timedelta(0, self.interval * self.last_step))
         if set_scale:
             self.scale.set_value(1-(0.0+self.last_step)/self.steps)
+        self.window.set_focus(None)
         return self.playing
 
     def set_timeout(self, timeout):
