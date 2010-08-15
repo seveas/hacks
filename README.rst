@@ -25,6 +25,10 @@ Make networkmanager forget passwords immediately after authenticating. This
 really should be a feature in n-m itself but sadly isn't. (The feature does
 exists in the most recent version of n-m)
 
+fake-time.c
+-----------
+Make your system think differently about time.
+
 gateway_identify.py
 -------------------
 xchat script that prints the IP address/hostname of users connecting from a
