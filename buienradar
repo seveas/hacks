@@ -19,16 +19,17 @@ import pygtk; pygtk.require('2.0'); import gtk, glib
 import sys
 import urllib2
 
-__version__ = (1,2,0)
+__version__ = (1,3,0)
 
 from collections import namedtuple
-_t = namedtuple('country',('country','url','interval'))
+_t = namedtuple('country',('country','bg','url','interval'))
 class BuienRadar(object):
     """BuienRadar GUI, display dutch weather radar images"""
 
     cache_dir = os.path.join(os.path.expanduser('~'), '.cache', 'buienradar')
     countries = {'nl':
                 _t('Nederland',
+                   None,
                    'http://www6.buienradar.nl/images.aspx?soort=1x1&bliksem=1' + \
                    '&jaar=%(year)d' + \
                    '&maand=%(month)02d' + \
@@ -38,6 +39,7 @@ class BuienRadar(object):
                    300),
                 'eu':
                 _t('Europe',
+                   None,
                    'http://www.meteox.nl/images.aspx?lightning=1' + \
                    '&jaar=%(year)d' + \
                    '&maand=%(month)02d' + \
@@ -47,9 +49,32 @@ class BuienRadar(object):
                    900),
                 'de':
                 _t('Deutschland',
+                   None,
                    'http://www.niederschlagsradar.de/image.ashx?type=bild' + \
                    '&time=%(year)d%(month)02d%(day)02d%(hour)02d%(minute)02d',
                    300),
+                'be':
+                _t(u'Belgi\u00eb',
+                   'http://buienradar.be/kaart1x1-320.gif',
+                   'http://www.buienradar.be/images.aspx?bliksem=1&soort=beeld1x1' +
+                   '&jaar=%(year)d' + \
+                   '&maand=%(month)02d' + \
+                   '&dag=%(day)02d' + \
+                   '&uur=%(hour)02d' + \
+                   '&minuut=%(minute)02d',
+                   300),
+                'se':
+                _t('Sverige',
+                   'http://www.vaderradar.se/images/scandinavie-550x512-pc.gif',
+                   'http://www.vaderradar.se/image.ashx?' + \
+                   '&time=%(year)d%(month)02d%(day)02d%(hour)02d%(minute)02d',
+                   900),
+                'dk':
+                _t('Danmark',
+                   'http://www.bygeradar.dk/images/denemarken-550x512.gif',
+                   'http://www.bygeradar.dk/image.ashx?' + \
+                   '&time=%(year)d%(month)02d%(day)02d%(hour)02d%(minute)02d',
+                   900),
                }
     hour_choices = (1, 2, 3, 6, 12, 24)
 
@@ -60,12 +85,13 @@ class BuienRadar(object):
         self.last_step = 0
         self.playing = False
         self.downloading = None
-
-        # Which radar images?
-        self.set_country(country=country)
+        self.images = {}
 
         # Logging
         self.init_logger(loglevel)
+
+        # Which radar images?
+        self.set_country(country=country)
 
         # The window 
         self.window = w = gtk.Window(gtk.WINDOW_TOPLEVEL)
@@ -130,7 +156,6 @@ class BuienRadar(object):
         # The image
         self.image = gtk.Image()
         vbox.pack_start(self.image)
-        self.images = {}
 
         # Statusbar
         self.statusbar = sb = gtk.Statusbar()
@@ -303,7 +328,7 @@ class BuienRadar(object):
             # Unset the magic "We're downloading" timeout
             if self.timeout == 1001 and self.last_step > 2:
                 self.set_timeout(12000/self.steps)
-            self.image.set_from_pixbuf(self.images[(timestamp, self.postfix)])
+            self.image.set_from_pixmap(self.images[(timestamp, self.postfix)], None)
             return timestamp
         imgfile = os.path.join(self.cache_dir, timestamp.strftime('%Y%m%d%H%M') + self.postfix + '.gif')
 
@@ -346,14 +371,59 @@ class BuienRadar(object):
 
         # Load the cached image from disk
         try:
-            self.images[(timestamp, self.postfix)] = gtk.gdk.pixbuf_new_from_file(imgfile)
+            pb = gtk.gdk.pixbuf_new_from_file(imgfile)
+            pb.saturate_and_pixelate(pb, self.saturation(timestamp), False)
+            pm = gtk.gdk.Pixmap(None, pb.get_property('width'), pb.get_property('height'), 24)
+            if self.background:
+                bg = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, True, 8, self.background.get_property('width'), self.background.get_property('height'))
+                self.background.saturate_and_pixelate(bg, self.saturation(timestamp), False)
+                pm.draw_pixbuf(None,bg,0,0,0,0)
+            pm.draw_pixbuf(None,pb,0,0,0,0)
+            self.images[(timestamp, self.postfix)] = pm
         except glib.GError:
             self.logger.warning("Unable to load %s, re-downloading" % imgfile)
             os.unlink(imgfile)
             return self.load_image(timestamp)
-        self.images[(timestamp, self.postfix)].saturate_and_pixelate(self.images[(timestamp, self.postfix)], self.saturation(timestamp), False)
-        self.image.set_from_pixbuf(self.images[(timestamp, self.postfix)])
+        self.image.set_from_pixmap(self.images[(timestamp, self.postfix)], None)
         return timestamp
+
+    def load_background(self, bg):
+        if bg is None:
+            return None
+        if ('bg', self.postfix) not in self.images:
+            imgfile = os.path.join(self.cache_dir, 'bg' + self.postfix + '.gif')
+            self.logger.info("Loading %s" % imgfile)
+
+            if not os.path.exists(imgfile):
+                url = bg
+                self.logger.debug("Downloading %s" % url)
+                try:
+                    req = urllib2.urlopen(url)
+                except urllib2.URLError:
+                    # Failed to download image
+                    self.stop_playing()
+                    error_dlg = gtk.MessageDialog(type=gtk.MESSAGE_ERROR, buttons=gtk.BUTTONS_OK,
+                                                  parent=self.window,
+                                                  message_format="Failed to download image. Check your internet connection and proxy settings")
+                    error_dlg.run()
+                    error_dlg.destroy()
+                    return
+
+                img = req.read()
+                # Cache the image 
+                fd = open(imgfile, 'w')
+                fd.write(img)
+                fd.close()
+
+            # Load the cached image from disk
+            try:
+                pb = gtk.gdk.pixbuf_new_from_file(imgfile)
+                self.images[('bg', self.postfix)] = pb
+            except glib.GError:
+                self.logger.warning("Unable to load %s, re-downloading" % imgfile)
+                os.unlink(imgfile)
+                return self.load_background(bg)
+        return self.images[('bg', self.postfix)]
 
     # Other functions
 
@@ -369,6 +439,7 @@ class BuienRadar(object):
         old_url = getattr(self, 'url', None)
         self.url = self.countries[country].url
         self.postfix = '_' + country
+        self.background = self.load_background(self.countries[country].bg)
         self.interval = self.countries[country].interval
         if hasattr(self, 'seconds'):
             self.steps = self.seconds/self.interval
@@ -468,14 +539,19 @@ logo = gtk.gdk.pixbuf_new_from_xpm_data([
 ])
 
 if __name__ == '__main__':
-    from optparse import OptionParser
+    from optparse import OptionParser, OptionConflictError
     parser = OptionParser()
     parser.add_option('-v', '--verbose', action='count', dest='verbosity',
                       help="Verbose output (use twice for higher verbosity)")
     for c in sorted(BuienRadar.countries.keys()):
-        parser.add_option('-' + c[0], '--' + c, dest='country', default='eu',
-                          action='store_const', const=c,
-                          help = BuienRadar.countries[c].country)
+        try:
+            parser.add_option('-' + c[0], '--' + c, dest='country', default='eu',
+                              action='store_const', const=c,
+                              help = BuienRadar.countries[c].country)
+        except OptionConflictError:
+            parser.add_option('-' + c[1], '--' + c, dest='country', default='eu',
+                              action='store_const', const=c,
+                              help = BuienRadar.countries[c].country)
     options, args = parser.parse_args()
     if args:
         parser.print_help()
