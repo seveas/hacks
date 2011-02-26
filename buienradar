@@ -273,6 +273,8 @@ class BuienRadar(object):
             for country in self.countries:
                 if country[0] == key:
                     self.set_country(country=country)
+                elif country[1] == key:
+                    self.set_country(country=country)
 
     # Player/display functions
 
