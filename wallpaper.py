@@ -12,6 +12,7 @@ from PIL import Image
 import random
 import re
 import stat
+import sys
 import subprocess
 import urllib2
 
@@ -96,8 +97,11 @@ class InterfaceLift(object):
 def main():
     uid = import_env('/usr/bin/nautilus')
     resolution = get_resolution()
-    klass = InterfaceLift # In the future there could be more classes
-    path = klass().update(resolution)
+    if len(sys.argv) == 2:
+        path = sys.argv[1]
+    else:
+        klass = InterfaceLift # In the future there could be more classes
+        path = klass().update(resolution)
     if path:
         if os.geteuid() == 0:
             set_gdm_background(path)
