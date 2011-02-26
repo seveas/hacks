@@ -1,0 +1,197 @@
+#!/usr/bin/python
+#
+# Watch p2000 alarms and notify for new alarms
+#
+# This program displays p2000 pager messages. p2000 is the pager system for the
+# dutch emergency services. Messages are downloaded from p2000-online.net every
+# so often (default: 60 seconds). This website also has a delay of about 90
+# seconds, making the total delay approximately 2.5 minutes.
+#
+# Requirements:
+# - A linux desktop
+# - pynotify and gtk to display notifications
+# - A few optional images downloadable from the same location as this script.
+#   Place these images in the same directory as this script.
+#   + brandweer_48x48.png
+#   + politie_48x48.png
+#   + ambulance_48x48.png
+#   + knrm_48x48.png
+# - libcanberra to play a sound when new alarms arrive (optional)
+#
+# (c)2011 Dennis Kaarsemaker 
+# License: gpl 3+
+
+import ctypes
+import os
+import glib
+import gtk
+import pynotify
+import re
+import sys
+import time
+import urllib
+
+# These are the region names as used by p2000-online.net
+regions = (
+    "Amsterdam-Amstelland",
+    "Brabant Noord",
+    "Brabant ZuidOost",
+    "Drenthe",
+    "Flevoland",
+    "Friesland",
+    "Gelderland-Midden",
+    "Gelderland-Zuid",
+    "Gooi en Vechtstreek",
+    "Groningen",
+    "Haaglanden",
+    "Hollands Midden",
+    "IJsselland",
+    "Kennemerland",
+    "Limburg Noord",
+    "Limburg Zuid",
+    "Midden en West Brabant",
+    "Noord- en Oost Gelderland",
+    "Noord-Holland Noord",
+    "Rotterdam Rijnmond",
+    "Twente",
+    "Utrecht",
+    "Zaanstreek-Waterland",
+    "Zeeland",
+    "Zuid Holland Zuid",
+)
+
+class Alert(object):
+    """Representation of a single message"""
+    def __init__(self, date, time, who, region, text, recipients):
+        self.time = '%s %s' % (date, time)
+        self.who = who
+        self.region = region
+        self.text = text
+        self.recipients = recipients
+
+        if self.is_lifeliner():
+            self.who = 'LifeLiner'
+
+    def is_lifeliner(self):
+        return 'lifeliner' in (''.join(self.recipients)).lower()
+
+    def show(self):
+        """Display a notification for this alarm"""
+        title = "%s %s" % (self.who, self.region)
+        text = "%s %s" % (self.time, self.text)
+        mod = self.__module__
+        if mod == '__main__':
+            path = sys.argv[0]
+        else:
+            path = sys.modules[mod].__file__
+        path = os.path.abspath(os.path.dirname(path))
+        img = 'file:///%s/%s_48x48.png' % (path, self.who.lower())
+        if not os.path.exists(img[7:]):
+            img = None
+        notification = pynotify.Notification(title, text, img)
+        notification.set_urgency(pynotify.URGENCY_CRITICAL)
+        if self.recipients:
+            notification.add_action("details", "Details", self.details)
+            # If the notification is deleted, the callback will not be called
+            _alerts.append(notification)
+        notification.set_timeout(15000)
+        notification.show()
+
+    def prnt(self):
+        """Output this alarm on stdout"""
+        print "%s %s %s\n%s%s" % (self.time, self.who, self.region, ' ' * (len(self.time) + 1), self.text)
+
+    def details(self, notification, action):
+        _alerts.remove(notification)
+        message = '<b>%s</b>\n%s\n<span foreground="gray">%s</span>' % (self.text, self.time, '\n'.join(self.recipients))
+        dialog = gtk.MessageDialog(type=gtk.MESSAGE_INFO, buttons=gtk.BUTTONS_CLOSE)
+        dialog.set_markup(message)
+        dialog.set_title('%s %s' % (self.who, self.region))
+        dialog.connect("response", lambda *args: dialog.destroy())
+        dialog.show()
+
+_alerts = []
+
+class P2000Interface(object):
+    def __init__(self, opts):
+        self.regions = opts.regions
+        self.verbose = opts.verbose
+        self.last_alert = None
+        self.quiet = opts.quiet
+
+        if not self.quiet:
+            try:
+                self.canberra = ctypes.CDLL('libcanberra.so.0')
+                self.ctx = ctypes.c_void_p()
+                self.canberra.ca_context_create(ctypes.byref(self.ctx))
+            except OSError:
+                # Can't find libcanberra
+                self.quiet = True
+        pynotify.init("p2000 meldingen")
+
+    def get_alerts(self):
+        """Fetch all alerts for these regions"""
+        url = 'http://www.p2000-online.net/p2000.php?%s&nofilterform=1'
+        url = url % '&'.join(['%s=1' % x for x in self.regions])
+        data = urllib.urlopen(url).read()
+        # Long live nasty regular expressions, eh
+        alerts = re.findall(r'<tr><td class="DT">(.*?)</td><td class="DT">(.*?)</td><td class=".*?">(.*?)</td>' +
+                            r'<td class="Regio">(.*?)</td><td class=".*?">(.*)</td></tr>\r?\n' +
+                            r'((?:<tr>\r?\n<td></td><td></td><td></td><td></td><td class=".*?">.*?</td></tr>\r?\n)*)'
+                            , data)
+        alerts = [list(a[0:-1]) + 
+            [re.findall(r'<tr>\r?\n<td></td><td></td><td></td><td></td><td class=".*?">(.*?)</td></tr>\r?\n', a[-1])]
+            for a in alerts]
+        return [Alert(*x) for x in reversed(alerts)]
+
+    def alert_iteration(self, first_iteration = False):
+        if self.verbose:
+            print time.ctime(), "Fetching alerts..."
+        alerts = self.get_alerts()
+        if self.verbose:
+            print time.ctime(), "Received %d alerts" % len(alerts)
+        play_sound = True
+        for alert in alerts[-5:]:
+            if alert.time <= self.last_alert:
+                continue
+            if play_sound:
+                self.canberra.ca_context_play(self.ctx, 1, "event.id", "message-new-instant", None)
+                play_sound = False
+            self.last_alert = alert.time
+            if self.verbose:
+                alert.prnt()
+            alert.show()
+        return not first_iteration
+
+def main():
+    import optparse
+
+    usage = """%prog [options]
+
+This tool autimatically downloads and displays p2000 alerts for the regions you
+specify (Default: Noord-Holland Noord and Flevoland). It can display images and
+play sounds too."""
+
+    p = optparse.OptionParser(usage = usage)
+    default_regions = ("Flevoland","Noord-HollandNoord")
+    for r in regions:
+        opt_r = '--%s' % r.lower().replace('-','').replace(' ','')
+        p.add_option(opt_r, dest='regions', action='append_const', const=r.replace(' ',''),
+                     help="Show alerts for region %s" % r)
+    p.add_option('-d', '--delay', dest='delay', type='int', default=60, metavar='SECS',
+            help="Delay between updates (default: 60)")
+    p.add_option('-v', '--verbose', dest='verbose', action='store_true', default=False,
+                 help="Verbose output")
+    p.add_option('-q', '--quiet', dest='quiet', action='store_true', default=False,
+                 help="Don't play sounds when new alarms arrive")
+    opts, args = p.parse_args()
+    if not opts.regions:
+        opts.regions = default_regions
+
+    ui = P2000Interface(opts)
+    glib.timeout_add_seconds(0, ui.alert_iteration, True)
+    glib.timeout_add_seconds(opts.delay, ui.alert_iteration)
+    gtk.main()
+
+if __name__ == '__main__':
+    main()
