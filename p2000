@@ -87,7 +87,19 @@ class Alert(object):
         path = os.path.abspath(os.path.dirname(path))
         img = 'file:///%s/%s_48x48.png' % (path, self.who.lower())
         if not os.path.exists(img[7:]):
-            img = None
+            # Try to grab it from github
+            img = 'file:///%s/.cache/%s_48x48.png' % (os.path.expanduser('~'), self.who.lower())
+            if not os.path.exists(img[7:]):
+                try:
+                    fd = open(img[7:], 'w')
+                    url = 'https://github.com/seveas/hacks/raw/master/' + img[img.rfind('/')+1:]
+                    req = urllib.urlopen(url)
+                    if req.code == 404:
+                        raise IOError
+                    fd.write(req.read())
+                except IOError:
+                    raise
+                    img = None
         notification = pynotify.Notification(title, text, img)
         notification.set_urgency(pynotify.URGENCY_CRITICAL)
         if self.recipients:
