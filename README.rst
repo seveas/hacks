@@ -70,6 +70,11 @@ singleton.py
 Pure-python subclassable singleton class that uses __new__ instead of the
 usual __init__+impl trick (borg pattern), so they are real singletons.
 
+stealenv.py
+-----------
+Steal (well, output) a process in a variety of formats, usable by shells and
+other languages.
+
 suid_script_wrapper.c
 ---------------------
 When sudo is not available, you can use this to let people run a script as
