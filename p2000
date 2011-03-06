@@ -60,6 +60,9 @@ regions = (
     "Zuid Holland Zuid",
 )
 
+def _escape(data):
+    return data.replace('&','&amp;').replace('<','&lt;').replace('>','&gt;')
+
 class Alert(object):
     """Representation of a single message"""
     def __init__(self, date, time, who, region, text, recipients):
@@ -98,9 +101,8 @@ class Alert(object):
                         raise IOError
                     fd.write(req.read())
                 except IOError:
-                    raise
                     img = None
-        notification = pynotify.Notification(title, text, img)
+        notification = pynotify.Notification(title, _escape(text), img)
         notification.set_urgency(pynotify.URGENCY_CRITICAL)
         if self.recipients:
             notification.add_action("details", "Details", self.details)
@@ -114,13 +116,13 @@ class Alert(object):
         print "%s %s %s\n%s%s" % (self.time, self.who, self.region, ' ' * (len(self.time) + 1), self.text)
 
     def details(self, notification, action):
-        _alerts.remove(notification)
         message = '<b>%s</b>\n%s\n<span foreground="gray">%s</span>' % (self.text, self.time, '\n'.join(self.recipients))
         dialog = gtk.MessageDialog(type=gtk.MESSAGE_INFO, buttons=gtk.BUTTONS_CLOSE)
         dialog.set_markup(message)
         dialog.set_title('%s %s' % (self.who, self.region))
         dialog.connect("response", lambda *args: dialog.destroy())
         dialog.show()
+        _alerts.remove(notification)
 
 _alerts = []
 
@@ -145,7 +147,13 @@ class P2000Interface(object):
         """Fetch all alerts for these regions"""
         url = 'http://www.p2000-online.net/p2000.php?%s&nofilterform=1'
         url = url % '&'.join(['%s=1' % x for x in self.regions])
-        data = urllib.urlopen(url).read()
+        try:
+            data = urllib.urlopen(url).read()
+        except IOError:
+            if self.verbose:
+                import traceback
+                traceback.print_exc()
+            return []
         # Long live nasty regular expressions, eh
         alerts = re.findall(r'<tr><td class="DT">(.*?)</td><td class="DT">(.*?)</td><td class=".*?">(.*?)</td>' +
                             r'<td class="Regio">(.*?)</td><td class=".*?">(.*)</td></tr>\r?\n' +
