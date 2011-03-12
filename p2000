@@ -104,7 +104,8 @@ class Alert(object):
                     img = None
         notification = pynotify.Notification(title, _escape(text), img)
         notification.set_urgency(pynotify.URGENCY_CRITICAL)
-        if self.recipients:
+        caps = pynotify.get_server_caps()
+        if self.recipients and 'actions' in caps:
             notification.add_action("details", "Details", self.details)
             # If the notification is deleted, the callback will not be called
             _alerts.append(notification)
