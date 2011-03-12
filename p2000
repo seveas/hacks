@@ -126,6 +126,7 @@ class Alert(object):
         dialog.set_title('%s %s' % (self.who, self.region))
         dialog.connect("response", lambda *args: dialog.destroy())
         dialog.show()
+        dialog.set_keep_above(True)
         _alerts.remove(notification)
 
 _alerts = []
@@ -171,6 +172,8 @@ class P2000Interface(object):
         return [Alert(*x) for x in reversed(alerts)]
 
     def alert_iteration(self, first_iteration = False):
+        global _alerts
+        _alerts = []
         if self.verbose:
             print time.ctime(), "Fetching alerts..."
         alerts = self.get_alerts()
