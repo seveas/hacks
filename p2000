@@ -114,7 +114,10 @@ class Alert(object):
 
     def prnt(self):
         """Output this alarm on stdout"""
-        print "%s %s %s\n%s%s" % (self.time, self.who, self.region, ' ' * (len(self.time) + 1), self.text)
+        print "%s %s %s %s" % (time.ctime(), self.time, self.who, self.region)
+        print "%s %s %s" % (time.ctime(), ' ' * len(self.time), self.text)
+        for r in self.recipients:
+            print "%s %s %s" % (time.ctime(), ' ' * len(self.time), r)
 
     def details(self, notification, action):
         message = '<b>%s</b>\n%s\n<span foreground="gray">%s</span>' % (self.text, self.time, '\n'.join(self.recipients))
@@ -148,6 +151,8 @@ class P2000Interface(object):
         """Fetch all alerts for these regions"""
         url = 'http://www.p2000-online.net/p2000.php?%s&nofilterform=1'
         url = url % '&'.join(['%s=1' % x for x in self.regions])
+        if self.verbose:
+            print time.ctime(), url
         try:
             data = urllib.urlopen(url).read()
         except IOError:
