@@ -78,7 +78,7 @@ class Alert(object):
     def is_lifeliner(self):
         return 'lifeliner' in (''.join(self.recipients)).lower()
 
-    def show(self):
+    def show(self, timeout):
         """Display a notification for this alarm"""
         title = "%s %s" % (self.who, self.region)
         text = "%s %s" % (self.time, self.text)
@@ -108,7 +108,7 @@ class Alert(object):
             notification.add_action("details", "Details", self.details)
             # If the notification is deleted, the callback will not be called
             _alerts.append(notification)
-        notification.set_timeout(15000)
+        notification.set_timeout(timeout * 1000)
         notification.show()
 
     def prnt(self):
@@ -171,6 +171,7 @@ class P2000Interface(object):
         if self.verbose:
             print time.ctime(), "Received %d alerts" % len(alerts)
         play_sound = True
+        timeout = min(10,3*len(alerts))
         for alert in alerts[-5:]:
             if alert.time <= self.last_alert:
                 continue
@@ -180,7 +181,7 @@ class P2000Interface(object):
             self.last_alert = alert.time
             if self.verbose:
                 alert.prnt()
-            alert.show()
+            alert.show(timeout)
         return not first_iteration
 
 def main():
