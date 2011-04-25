@@ -39,8 +39,13 @@ formats, usable by shells and other languages."""
     opts, args = p.parse_args()
     if len(args) != 1 or not args[0].isdigit():
         p.error('Must specify exactly one pid')
-    if sum([opts.sh, opts.csh, opts.json, opts.zero]) != 1:
+    if sum([opts.sh, opts.csh, opts.json, opts.zero]) > 1:
         p.error('Must specify exactly one output format')
+    elif sum([opts.sh, opts.csh, opts.json, opts.zero]) == 0:
+        if os.environ['SHELL'].endswith('csh'):
+            opts.csh = True
+        else:
+            opts.sh = True
 
     pid = int(args[0])
     env = stealenv(pid, False)
