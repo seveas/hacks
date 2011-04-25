@@ -163,7 +163,7 @@ class P2000Interface(object):
             return []
         # Long live nasty regular expressions, eh
         alerts = re.findall(r'<tr><td class="DT">(.*?)</td><td class="DT">(.*?)</td><td class=".*?">(.*?)</td>' +
-                            r'<td class="Regio">(.*?)</td><td class=".*?">(.*)</td></tr>\r?\n' +
+                            r'<td class="Regio">(.*?)</td><td class=".*?">(.*?)</td></tr>\r?\n' +
                             r'((?:<tr>\r?\n<td></td><td></td><td></td><td></td><td class=".*?">.*?</td></tr>\r?\n)*)'
                             , data)
         alerts = [list(a[0:-1]) + 
@@ -180,17 +180,17 @@ class P2000Interface(object):
         if self.verbose:
             print time.ctime(), "Received %d alerts" % len(alerts)
         play_sound = True
+        alerts = [x for x in alerts[-5:] if x.time > self.last_alert]
         timeout = min(10,3*len(alerts))
+        print "Timeout: %d" % timeout
         for alert in alerts[-5:]:
-            if alert.time <= self.last_alert:
-                continue
             if play_sound:
                 self.canberra.ca_context_play(self.ctx, 1, "event.id", "message-new-instant", None)
                 play_sound = False
-            self.last_alert = alert.time
             if self.verbose:
                 alert.prnt()
             alert.show(timeout)
+            self.last_alert = alert.time
         return not first_iteration
 
 def main():
@@ -204,6 +204,8 @@ play sounds too."""
 
     p = optparse.OptionParser(usage = usage)
     default_regions = ("Flevoland","Noord-HollandNoord")
+    p.add_option('-a', '--all', dest='all_regions', action='store_true', default=False,
+                 help="Show alerts for all regions")
     for r in regions:
         opt_r = '--%s' % r.lower().replace('-','').replace(' ','')
         p.add_option(opt_r, dest='regions', action='append_const', const=r.replace(' ',''),
@@ -217,6 +219,8 @@ play sounds too."""
     opts, args = p.parse_args()
     if not opts.regions:
         opts.regions = default_regions
+    if opts.all_regions:
+        opts.regions = [x.replace(' ','') for x in regions]
 
     ui = P2000Interface(opts)
     glib.timeout_add_seconds(0, ui.alert_iteration, True)
