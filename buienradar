@@ -270,11 +270,16 @@ class BuienRadar(object):
             self.set_seconds(seconds = key * 3600)
             self.combo_box.set_active(self.hour_choices.index(key))
         else:
-            for country in self.countries:
+            last_c = '_'
+            for country in sorted(self.countries.keys()):
+                print country
                 if country[0] == key:
                     self.set_country(country=country)
-                elif country[1] == key:
+                    break
+                elif last_c == country[0] and country[1] == key:
                     self.set_country(country=country)
+                    break
+                last_c = country[0]
 
     # Player/display functions
 
