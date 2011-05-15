@@ -56,6 +56,11 @@ pcat
 ----
 A cat that works on fifos (created with mkfifo).
 
+progressbar.py
+--------------
+Python library for creating smooth progressbars on the terminal using unicode
+characters for sub-character precision.
+
 reset_password
 --------------
 Boot from a live cd and run this to reset all passwords it finds.
