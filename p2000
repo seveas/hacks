@@ -184,11 +184,12 @@ class P2000Interface(object):
         if self.verbose:
             print time.ctime(), "Received %d alerts" % len(alerts)
         play_sound = True
-        alerts = [x for x in alerts[-5:] if x.time > self.last_alert]
+        alerts = [x for x in alerts[:5] if x.time > self.last_alert]
+        alerts.reverse()
         timeout = min(10,3*len(alerts))
         if self.verbose:
             print "Timeout: %d" % timeout
-        for alert in alerts[-5:]:
+        for alert in alerts:
             if play_sound:
                 self.canberra.ca_context_play(self.ctx, 1, "event.id", "message-new-instant", None)
                 play_sound = False

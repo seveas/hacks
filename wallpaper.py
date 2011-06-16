@@ -31,11 +31,13 @@ def set_background(path):
     subprocess.call(["gconftool-2", "--set", GCONF_KEY, "--type", "string", path])
 
 def set_gdm_background(path):
-    from gdm2.gdm2gconf import GDM2Theme as gt
-    gt = gt()
-    gt.DEBUG = False
-    gt.SetWallpaper(path, False)
-
+#    from gdm2.gdm2gconf import GDM2Theme as gt
+#    gt = gt()
+#    gt.DEBUG = False
+#    gt.SetWallpaper(path, False)
+    with open('/usr/share/images/xsplash/bg.jpg','w') as wfd:
+        with open(path, 'r') as rfd:
+            wfd.write(rfd.read())
 
 def import_env(find_exe):
     for d in os.listdir('/proc'):
