@@ -10,6 +10,7 @@
 # Requirements:
 # - A linux desktop
 # - pynotify and gtk to display notifications
+# - beautifulsoup for parsing html
 # - A few optional images downloadable from the same location as this script.
 #   Place these images in the same directory as this script.
 #   + brandweer_48x48.png
@@ -21,12 +22,12 @@
 # (c)2011 Dennis Kaarsemaker 
 # License: gpl 3+
 
+from BeautifulSoup import BeautifulSoup as soup
 import ctypes
 import os
 import glib
 import gtk
 import pynotify
-import re
 import sys
 import time
 import urllib
@@ -65,12 +66,12 @@ def _escape(data):
 
 class Alert(object):
     """Representation of a single message"""
-    def __init__(self, date, time, who, region, text, recipients):
+    def __init__(self, date, time, who, region, text, recipients = None):
         self.time = '%s %s' % (date, time)
         self.who = who
         self.region = region
         self.text = text
-        self.recipients = recipients
+        self.recipients = recipients or []
 
         if self.is_lifeliner():
             self.who = 'LifeLiner'
@@ -161,15 +162,18 @@ class P2000Interface(object):
                 import traceback
                 traceback.print_exc()
             return []
-        # Long live nasty regular expressions, eh
-        alerts = re.findall(r'<tr><td class="DT">(.*?)</td><td class="DT">(.*?)</td><td class=".*?">(.*?)</td>' +
-                            r'<td class="Regio">(.*?)</td><td class=".*?">(.*?)</td></tr>\r?\n' +
-                            r'((?:<tr>\r?\n<td></td><td></td><td></td><td></td><td class=".*?">.*?</td></tr>\r?\n)*)'
-                            , data)
-        alerts = [list(a[0:-1]) + 
-            [re.findall(r'<tr>\r?\n<td></td><td></td><td></td><td></td><td class=".*?">(.*?)</td></tr>\r?\n', a[-1])]
-            for a in alerts]
-        return [Alert(*x) for x in reversed(alerts)]
+
+        doc = soup(data)
+        alerts = []
+        table = doc.body('table', {'style': 'align:center'})[0]
+        for tr in table('tr'):
+            if tr.td.get('class', None) == 'DT':
+                alerts.append(Alert(*[x.text for x in tr('td')]))
+            else:
+                recipient = tr('td')[-1].text
+                if recipient != '&nbsp;':
+                    alerts[-1].recipients.append(recipient)
+        return alerts
 
     def alert_iteration(self, first_iteration = False):
         global _alerts
@@ -182,7 +186,8 @@ class P2000Interface(object):
         play_sound = True
         alerts = [x for x in alerts[-5:] if x.time > self.last_alert]
         timeout = min(10,3*len(alerts))
-        print "Timeout: %d" % timeout
+        if self.verbose:
+            print "Timeout: %d" % timeout
         for alert in alerts[-5:]:
             if play_sound:
                 self.canberra.ca_context_play(self.ctx, 1, "event.id", "message-new-instant", None)
