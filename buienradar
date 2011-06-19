@@ -19,7 +19,7 @@ import pygtk; pygtk.require('2.0'); import gtk, glib
 import sys
 import urllib2
 
-__version__ = (1,3,0)
+__version__ = (1,5)
 
 from collections import namedtuple
 _t = namedtuple('country',('country','bg','url','interval'))
@@ -78,7 +78,7 @@ class BuienRadar(object):
                }
     hour_choices = (1, 2, 3, 6, 12, 24)
 
-    def __init__(self, country, loglevel):
+    def __init__(self, country, loglevel, seconds):
         """Initialize the GUI and internal data"""
 
         # Not playing yet
@@ -132,10 +132,13 @@ class BuienRadar(object):
 
         self.combo_box = b = gtk.combo_box_new_text()
         hbox.pack_start(b,expand=False)
-        for i in self.hour_choices:
+        active = 0
+        for n,i in enumerate(self.hour_choices):
             b.append_text('%d hour' % i)
-        b.set_active(2)
-        self.set_seconds(seconds=10800)
+            if i * 3600 == seconds:
+                active = n
+        b.set_active(active)
+        self.set_seconds(seconds=seconds)
         b.connect('changed', self.set_seconds)
 
         self.playbutton = b = gtk.Button(stock=gtk.STOCK_MEDIA_PLAY)
@@ -272,7 +275,6 @@ class BuienRadar(object):
         else:
             last_c = '_'
             for country in sorted(self.countries.keys()):
-                print country
                 if country[0] == key:
                     self.set_country(country=country)
                     break
@@ -550,21 +552,30 @@ if __name__ == '__main__':
     parser = OptionParser()
     parser.add_option('-v', '--verbose', action='count', dest='verbosity',
                       help="Verbose output (use twice for higher verbosity)")
+    for h, s in [(str(x), x * 3600) for x in BuienRadar.hour_choices]:
+        if len(h) == 1:
+            parser.add_option('-' + h, '--' + h, dest='seconds', default=10800,
+                              action='store_const', const=s,
+                              help="Show a %s hour loop" % h)
+        else:
+            parser.add_option('--' + h, dest='seconds', default=10800,
+                              action='store_const', const=s,
+                              help="Show a %s hour loop" % h)
     for c in sorted(BuienRadar.countries.keys()):
         try:
             parser.add_option('-' + c[0], '--' + c, dest='country', default='eu',
                               action='store_const', const=c,
-                              help = BuienRadar.countries[c].country)
+                              help=BuienRadar.countries[c].country)
         except OptionConflictError:
             parser.add_option('-' + c[1], '--' + c, dest='country', default='eu',
                               action='store_const', const=c,
-                              help = BuienRadar.countries[c].country)
+                              help=BuienRadar.countries[c].country)
     options, args = parser.parse_args()
     if args:
         parser.print_help()
         sys.exit(1)
     level = {1: logging.INFO, 2: logging.DEBUG}.get(options.verbosity, logging.WARNING)
-    BuienRadar(options.country, level).main()
+    BuienRadar(options.country, level, options.seconds).main()
 
 # `Now you see it,' said the bird. `Now you don't.'
 # - Douglas Adams, Mostly Harmless
