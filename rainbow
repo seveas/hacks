@@ -1,0 +1,15 @@
+#!/usr/bin/python
+#
+# echo -e 'Taste\nthe\nrainbow!' | figlet | cowsay -n | ./rainbow
+
+import math, random, sys
+
+def rainbow(freq, i, c):
+    part = lambda a, b: int(6 * (math.sin(freq * i + a * math.pi/3) * 127 + 128) / 256) * b
+    return '\033[38;5;%dm%s' % (sum([16, part(0, 36), part(2, 6), part(4, 1)]), c)
+
+start = random.randint(0,256); i=1
+while i:
+    line = sys.stdin.readline().rstrip()
+    i = line and i + 1 or 0
+    print "".join([rainbow(0.3, (start+i+j)/6.0, c) for j,c in enumerate(line)]) + '\033[0m'

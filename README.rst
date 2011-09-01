@@ -61,6 +61,10 @@ progressbar.py
 Python library for creating smooth progressbars on the terminal using unicode
 characters for sub-character precision.
 
+rainbow
+-------
+Colorize output with a rainbow pattern. For those boring days.
+
 reset_password
 --------------
 Boot from a live cd and run this to reset all passwords it finds.
