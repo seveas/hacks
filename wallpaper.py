@@ -20,6 +20,7 @@ DOWNLOAD_PATH = '/home/dennis/Pictures'
 INDEX = "http://interfacelift.com/wallpaper_beta/downloads/date/any/"
 DOWNLOAD_BASE = "http://interfacelift.com/wallpaper_beta/grab/"
 GCONF_KEY = "/desktop/gnome/background/picture_filename"
+GSETTINGS_KEY = ("org.gnome.desktop.background", "picture-uri")
 
 def get_resolution():
     xrandr_output = subprocess.Popen(["/usr/bin/xrandr"],stdout=subprocess.PIPE).communicate()[0]
@@ -29,6 +30,7 @@ def get_resolution():
 def set_background(path):
     # Lazy!
     subprocess.call(["gconftool-2", "--set", GCONF_KEY, "--type", "string", path])
+    subprocess.call(["gsettings", "set", "org.gnome.desktop.background", "picture-uri", "file://" + path])
 
 def set_gdm_background(path):
 #    from gdm2.gdm2gconf import GDM2Theme as gt
@@ -108,7 +110,7 @@ def main():
         if os.geteuid() == 0:
             set_gdm_background(path)
             os.setuid(uid)
-        set_background(path)
+        set_background(os.path.abspath(path))
 
 if __name__ == '__main__':
     main()
