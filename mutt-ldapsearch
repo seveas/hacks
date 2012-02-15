@@ -1,0 +1,26 @@
+#!/usr/bin/python
+
+LDAP_HOST = 'ldap://ldap.server.com'
+LDAP_BASE = 'ou=People,dc=server,dc=com'
+
+import ldap
+import re
+import sys
+
+search_string = ' '.join(sys.argv[1:])
+if not re.match(r'^[a-zA-Z .*]+$', search_string):
+    print "Invalid search string"
+    sys.exit(1)
+search_string = "(|%s)" % ''.join(['(%s=*%s*)' % (key, search_string) for key in ('sn', 'mail', 'givenName', 'cn')])
+
+server = ldap.initialize(LDAP_HOST)
+try:
+    server.simple_bind_s()
+except ldap.SERVER_DOWN:
+    sys.exit(0)
+entries = server.search_s(LDAP_BASE, ldap.SCOPE_ONELEVEL, search_string)
+
+entries = [x for x in entries if 'mail' in x[1]]
+print "%d entries found" % len(entries)
+for e in entries:
+    print "%s\t%s\tFrom LDAP" % (e[1]['mail'][0], e[1]['cn'][0])

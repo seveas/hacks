@@ -3,6 +3,10 @@ Collection of hacks
 
 This is a collection of small hacks I wrote over the years.
 
+ansi.py
+-------
+ANSI terminal colors demo. Glorified readme, reusable as lib.
+
 buienradar
 ----------
 Tiny PyGTK app that downloads and displays dutch or west-european radarimages
@@ -42,6 +46,14 @@ window.
 launchpadduser
 --------------
 create local accounts based on launchpad accounts.
+
+mutt-ldapsearch
+---------------
+Search e-mail addresses in ldap from mutt
+
+mutt-keyring
+------------
+Make mutt use gnome-keyring for passwords
 
 nagios_uptime_report.pl 
 -----------------------

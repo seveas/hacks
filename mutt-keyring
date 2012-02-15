@@ -1,0 +1,33 @@
+#!/usr/bin/python
+#
+# Fetch passwords for imap/smtp accounts from gnome-keyring
+# Adding passwords to gnome-keyring is up to yourself. Passwords added
+# by evolution will be picked up, which may help.
+#
+# Usage in .muttrc:
+# source "~/bin/mutt-keyring $folder $smtp_url|"
+
+import gnomekeyring as gk
+import glib
+import sys
+import urlparse
+
+KEYRING_NAME = 'login'
+
+def parse_url(url):
+    url = urlparse.urlsplit(url)
+    scheme = 'imap' if url.scheme.startswith('imap') else 'smtp'
+    username = url.username
+    if ';' in username:
+        username = username[:username.find(';')]
+    return (scheme, username, url.hostname)
+
+urls = [parse_url(x) for x in sys.argv[1:]]
+glib.set_application_name('mutt')
+for id in gk.list_item_ids_sync(KEYRING_NAME):
+    item = gk.item_get_info_sync(KEYRING_NAME, id)
+    name = item.get_display_name()
+    if name.startswith(('imap','smtp')):
+        url = parse_url(name)
+        if url in urls:
+            print "set %s_pass=%s" % (url[0], item.get_secret())
