@@ -13,10 +13,11 @@ Tiny PyGTK app that downloads and displays dutch or west-european radarimages
 that show where it rains. Loops over 1-24 hours worth of images and has
 keyboard control.
 
-check_trace ----------- Nagios plugin to resolve a check whether a hostname is
-fully resolvable, from the root nameservers down to the authoritative
-nameserver for the domain. On more than one occasion, SIDN broke the .nl zone,
-making this check useful.
+check_trace
+-----------
+Nagios plugin to resolve a check whether a hostname is fully resolvable, from
+the root nameservers down to the authoritative nameserver for the domain. On
+more than one occasion, SIDN broke the .nl zone, making this check useful.
 
 cisco-crypt.py
 --------------
