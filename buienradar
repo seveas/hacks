@@ -31,7 +31,7 @@ class BuienRadar(object):
     cache_dir = os.path.join(os.path.expanduser('~'), '.cache', 'buienradar')
     countries = {'nl':
                 _t('Nederland',
-                   None,
+                   'http://www.buienradar.nl/kaart1x1-550.gif',
                    'http://www6.buienradar.nl/images.aspx?soort=1x1&bliksem=1' + \
                    '&jaar=%(year)d' + \
                    '&maand=%(month)02d' + \
@@ -41,7 +41,7 @@ class BuienRadar(object):
                    300),
                 'eu':
                 _t('Europe',
-                   None,
+                   'http://europa.buienradar.nl/kaart.gif',
                    'http://www.meteox.nl/images.aspx?lightning=1' + \
                    '&jaar=%(year)d' + \
                    '&maand=%(month)02d' + \
@@ -51,19 +51,20 @@ class BuienRadar(object):
                    900),
                 'de':
                 _t('Deutschland',
-                   None,
+                   'http://www.niederschlagsradar.de/kaarten/duitsland-550x512.gif',
                    'http://www.niederschlagsradar.de/image.ashx?type=bild' + \
                    '&time=%(year)d%(month)02d%(day)02d%(hour)02d%(minute)02d',
                    300),
                 'be':
                 _t(u'Belgi\u00eb',
                    'http://buienradar.be/kaart1x1-320.gif',
-                   'http://www.buienradar.be/images.aspx?bliksem=1&soort=beeld1x1' +
-                   '&jaar=%(year)d' + \
-                   '&maand=%(month)02d' + \
-                   '&dag=%(day)02d' + \
-                   '&uur=%(hour)02d' + \
-                   '&minuut=%(minute)02d',
+                   #'http://www.buienradar.be/images.aspx?bliksem=1&soort=beeld1x1' +
+                   #'&jaar=%(year)d' + \
+                   #'&maand=%(month)02d' + \
+                   #'&dag=%(day)02d' + \
+                   #'&uur=%(hour)02d' + \
+                   #'&minuut=%(minute)02d',
+                   'http://www.buienradar.be/image/?time=%(year)d%(month)02d%(day)02d%(hour)02d%(minute)02d',
                    300),
                 'se':
                 _t('Sverige',
@@ -406,8 +407,11 @@ class BuienRadar(object):
             if self.background:
                 bg = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, True, 8, self.background.get_property('width'), self.background.get_property('height'))
                 self.background.saturate_and_pixelate(bg, self.saturation(timestamp), False)
+                pb.add_alpha(False, 0, 0, 0)
+                pb.composite(bg, 0, 0, pb.get_property('width'), pb.get_property('height'), 0, 0, 1, 1, gtk.gdk.INTERP_NEAREST, 192)
                 pm.draw_pixbuf(None,bg,0,0,0,0)
-            pm.draw_pixbuf(None,pb,0,0,0,0)
+            else:
+                pm.draw_pixbuf(None,pb,0,0,0,0)
             self.images[(timestamp, self.postfix)] = pm
         except glib.GError:
             self.logger.warning("Unable to load %s, re-downloading" % imgfile)
