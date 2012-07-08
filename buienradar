@@ -20,6 +20,8 @@ import sys
 import urllib2
 
 __version__ = (1,5)
+import warnings
+warnings.filterwarnings('ignore', 'could not open display')
 
 from collections import namedtuple
 _t = namedtuple('country',('country','bg','url','interval'))
@@ -78,7 +80,7 @@ class BuienRadar(object):
                }
     hour_choices = (1, 2, 3, 6, 12, 24)
 
-    def __init__(self, country, loglevel, seconds):
+    def __init__(self, gui, country, loglevel, seconds):
         """Initialize the GUI and internal data"""
 
         # Not playing yet
@@ -93,7 +95,19 @@ class BuienRadar(object):
         # Which radar images?
         self.set_country(country=country)
 
-        # The window 
+        self.gui = gui
+
+        # The window
+        if self.gui:
+            self.create_gui(seconds)
+
+        self.set_seconds(seconds=seconds)
+
+        # Make sure we can store our images
+        if not os.path.exists(self.cache_dir):
+            os.makedirs(self.cache_dir)
+
+    def create_gui(self, seconds):
         self.window = w = gtk.Window(gtk.WINDOW_TOPLEVEL)
         w.set_title("Weather radar %s" % '.'.join(str(x) for x in __version__))
         w.connect("delete_event", self.quit)
@@ -138,7 +152,6 @@ class BuienRadar(object):
             if i * 3600 == seconds:
                 active = n
         b.set_active(active)
-        self.set_seconds(seconds=seconds)
         b.connect('changed', self.set_seconds)
 
         self.playbutton = b = gtk.Button(stock=gtk.STOCK_MEDIA_PLAY)
@@ -167,13 +180,10 @@ class BuienRadar(object):
 
         self.window.set_focus(None)
 
-        # Make sure we can store our images
-        if not os.path.exists(self.cache_dir):
-            os.makedirs(self.cache_dir)
-
     def main(self):
         """Show the gui and run the mainloop. Also start the player"""
-        self.window.show_all()
+        if self.gui:
+            self.window.show_all()
         glib.idle_add(self.start_playing)
         glib.timeout_add(900000, self.clear_cache, None)
         gtk.main()
@@ -181,7 +191,6 @@ class BuienRadar(object):
     def quit(self, eventsrc, *args):
         """Quit the mainloop"""
         gtk.main_quit()
-
 
     # Player control
     # start/stop and pause/resume are very similar, the difference is in what
@@ -195,7 +204,8 @@ class BuienRadar(object):
         if self.playing:
             return
         self.playing = True
-        self.playbutton.set_label(gtk.STOCK_MEDIA_PAUSE)
+        if self.gui:
+            self.playbutton.set_label(gtk.STOCK_MEDIA_PAUSE)
         self.timer = glib.timeout_add(self.timeout, self.play_step)
 
     def stop_playing(self):
@@ -203,7 +213,8 @@ class BuienRadar(object):
         if not self.playing:
             return
         glib.source_remove(self.timer)
-        self.playbutton.set_label(gtk.STOCK_MEDIA_PLAY)
+        if self.gui:
+            self.playbutton.set_label(gtk.STOCK_MEDIA_PLAY)
         self.playing = False
 
     def pause_playing(self, eventsrc, event):
@@ -293,22 +304,27 @@ class BuienRadar(object):
             self.last_step = self.steps
         else:
             self.last_step -= 1
+
         self.load_image(self.cycle_time - datetime.timedelta(0, self.interval * self.last_step))
-        if set_scale:
-            self.scale.set_value(1-(0.0+self.last_step)/self.steps)
-        self.window.set_focus(None)
+        if self.gui:
+            if set_scale:
+                self.scale.set_value(1-(0.0+self.last_step)/self.steps)
+            self.window.set_focus(None)
+        if self.last_step == 0 and not self.gui:
+            self.clear_cache(None)
+            self.quit(None)
         return self.playing
 
     def set_timeout(self, timeout):
         """Set the time between frames and restart the player"""
         self.timeout = timeout = max(100, timeout) # Timeout must be 100ms minimum
         # 1001 is a magic value, it means we are downloading images. Tell the user 
-        if self.timeout == 1001 and not self.downloading:
+        if self.timeout == 1001 and not self.downloading and self.gui:
             self.downloading = self.statusbar.push(1, "Slowing down animation to download images")
         elif self.downloading is not None:
-            if hasattr(self.statusbar, 'remove_message'):
+            if self.gui and hasattr(self.statusbar, 'remove_message'):
                 self.statusbar.remove_message(1, self.downloading)
-            elif hasattr(self.statusbar, 'remove'):
+            elif self.gui and hasattr(self.statusbar, 'remove'):
                 self.statusbar.remove(1, self.downloading)
             self.downloading = None
         if self.playing:
@@ -348,6 +364,8 @@ class BuienRadar(object):
             # Unset the magic "We're downloading" timeout
             if self.timeout == 1001 and self.last_step > 2:
                 self.set_timeout(12000/self.steps)
+            if not self.gui:
+                return timestamp
         else:
             # Set the magic "We're downloading" timeout
             if self.last_step > 2 and self.timeout != 1001:
@@ -377,6 +395,8 @@ class BuienRadar(object):
             fd = open(imgfile, 'w')
             fd.write(img)
             fd.close()
+            if not self.gui:
+                return timestamp
 
         # Load the cached image from disk
         try:
@@ -552,6 +572,8 @@ if __name__ == '__main__':
     parser = OptionParser()
     parser.add_option('-v', '--verbose', action='count', dest='verbosity',
                       help="Verbose output (use twice for higher verbosity)")
+    parser.add_option('--no-gui', action='store_false', dest='gui', default=True,
+                      help="Don't show a GUI, just download images")
     for h, s in [(str(x), x * 3600) for x in BuienRadar.hour_choices]:
         if len(h) == 1:
             parser.add_option('-' + h, '--' + h, dest='seconds', default=10800,
@@ -575,7 +597,7 @@ if __name__ == '__main__':
         parser.print_help()
         sys.exit(1)
     level = {1: logging.INFO, 2: logging.DEBUG}.get(options.verbosity, logging.WARNING)
-    BuienRadar(options.country, level, options.seconds).main()
+    BuienRadar(options.gui, options.country, level, options.seconds).main()
 
 # `Now you see it,' said the bird. `Now you don't.'
 # - Douglas Adams, Mostly Harmless
