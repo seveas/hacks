@@ -379,7 +379,10 @@ class BuienRadar(object):
             self.logger.debug("Downloading %s" % url)
             try:
                 req = urllib2.urlopen(url)
-            except urllib2.URLError:
+            except urllib2.URLError as e:
+                if e.code == 404:
+                    self.logger.debug("Download failed for %s" % url)
+                    return self.load_image(timestamp - datetime.timedelta(0, self.interval))
                 # Failed to download image
                 self.stop_playing()
                 error_dlg = gtk.MessageDialog(type=gtk.MESSAGE_ERROR, buttons=gtk.BUTTONS_OK,
@@ -387,6 +390,7 @@ class BuienRadar(object):
                                               message_format="Failed to download image. Check your internet connection and proxy settings")
                 error_dlg.run()
                 error_dlg.destroy()
+                sys.exit(1)
             img = req.read()
             if len(img) < 1000:
                 # Image does not exist yet, try a 5 minute older one
