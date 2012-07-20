@@ -19,6 +19,11 @@ Nagios plugin to resolve a check whether a hostname is fully resolvable, from
 the root nameservers down to the authoritative nameserver for the domain. On
 more than one occasion, SIDN broke the .nl zone, making this check useful.
 
+clientbucket_to_git
+--------------------
+Converts a puppet clientbucket to a git repository for easy inspection of
+server changes over time.
+
 cisco-crypt.py
 --------------
 Python module and standalone script for encrypting/decrypting cisco-style

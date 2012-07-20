@@ -1,0 +1,120 @@
+#!/usr/bin/python
+#
+# Puppet nicely stores old versions of files in the clientbucket. The
+# clientbucket is a pain to search through though, especially if you want to
+# see changes over time.
+#
+# So let's convert the client bucket to a git repository!
+#
+# This script does *not* work in an incremental way, you will need to
+# regenerate the entire repository every time.
+#
+# Usage:
+#
+# clientbucket_to_git [ -b bucket ... ] [ -r repo]
+#
+# Default buckets: 
+# - /var/puppet/clientbuckt
+# - /var/lib/puppet/clientbucket
+#
+# Default repo path: /tmp/clientbucket
+
+import os
+import stat
+import subprocess
+import optparse
+
+default_buckets = ['/var/puppet/clientbucket', '/var/lib/puppet/clientbucket']
+default_repo = '/tmp/clientbucket'
+
+def buckets_to_git(paths, repo):
+    # First we read all path info from the buckets
+    files = []
+    for path in paths:
+        for dirpath, _, filenames in os.walk(path):
+            if 'paths' in filenames:
+                cp = os.path.join(dirpath, 'contents')
+                with open(os.path.join(dirpath, 'paths')) as fd:
+                    for name in fd.read().rstrip().split('\n'):
+                        if not name.startswith('/'):
+                            name = '/' + name
+                        files.append(File(name, os.stat(cp)[stat.ST_MTIME], cp))
+    files.sort(key=lambda x: x.mtime)
+
+    # Create the initial commit: first mention of all files
+    seen = {}
+    repo = Repo(repo)
+    for file in list(files):
+        if file.path not in seen:
+            seen[file.path] = file.mtime
+            repo.add_file(file.path, file.path_to_content)
+            files.remove(file)
+        else:
+            # Correct the mtimes. The commit time of a file in the clientbucket
+            # is when the previous puppetrun that changed this file ran
+            file.mtime, seen[file.path] = seen[file.path] , file.mtime
+    repo.commit(files[0].mtime, """Initial commit
+
+This commit contains the first occurence in the clientbucket of all files. This
+is not necessarily the same as the "virgin" stat of this machine, but will make
+all diffs look accurate and not add any new files later on.
+
+The reason for this is that it is impossible to determine when a file was added
+to the repository, as that does not create an entry in the clientbucket.
+""")
+
+    # Now add the deletions and final states
+    for path in seen:
+        if not os.path.exists(path):
+            files.append(File(path, seen[path], None))
+        else:
+            files.append(File(path, seen[path], path))
+    files.sort(key=lambda x: x.mtime)
+
+    # Now we add files one by one, committing every 5 minutes to group by puppet run
+    last_mtime = files[0].mtime
+    for file in files:
+        if file.mtime > last_mtime + 300:
+            repo.commit(last_mtime, "Puppet run at approximately %s" % str(last_mtime))
+            last_mtime = file.mtime
+        repo.add_file(file.path, file.path_to_content)
+    repo.commit(last_mtime, "Puppet run at approximately %s" % str(last_mtime))
+
+class File(object):
+    def __init__(self, path, mtime, path_to_content):
+        self.path, self.mtime, self.path_to_content = path, mtime, path_to_content
+
+class Repo(object):
+    def __init__(self, path):
+        self.path = path
+        os.mkdir(path)
+        subprocess.call(['git', 'init'], preexec_fn=lambda: os.chdir(self.path))
+
+    def add_file(self, path, content_path):
+        if path.startswith('/'):
+            path = path[1:]
+        if path.startswith('/'):
+            raise ValueError("Invalid path: %s" % path)
+        if not os.path.exists(os.path.join(self.path, os.path.dirname(path))):
+            os.makedirs(os.path.join(self.path, os.path.dirname(path)))
+        if not content_path:
+            subprocess.call(['git', 'rm', '-q', path], preexec_fn=lambda: os.chdir(self.path))
+        else:
+            with open(content_path) as rfd:
+                with open(os.path.join(self.path, path), 'w') as wfd:
+                    wfd.write(rfd.read())
+            subprocess.call(['git', 'add', path], preexec_fn=lambda: os.chdir(self.path))
+
+    def commit(self, mtime, msg):
+        subprocess.Popen(['git', 'commit', '-q', '--date', str(mtime), '-F-'], preexec_fn=lambda: os.chdir(self.path), stdin=subprocess.PIPE).communicate(msg)
+
+if __name__ == '__main__':
+    p = optparse.OptionParser()
+    p.usage = "%prog [ -b bucket ... ] [ -r repo]"
+    p.add_option("-b", "--bucket", dest="buckets", default=default_buckets, metavar="PATH",
+                 help="Bucket to read (default: %s)" % ", ".join(default_buckets))
+    p.add_option("-r", "--repository", dest="repo", default=default_repo, metavar="PATH",
+                 help="Path to the git repository (default: %s)" % default_repo)
+    opts, args = p.parse_args()
+
+    buckets_to_git(opts.buckets, opts.repo)
