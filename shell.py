@@ -205,6 +205,13 @@ pipe = Pipe()
 # Testing is good. Must test.
 if __name__ == '__main__':
     import unittest
+    import sys
+
+    PY3 = sys.version_info[0] == 3
+    if PY3:
+        b = lambda x: x.encode('latin-1')
+    else:
+        b = lambda x: x
 
     class ShellTest(unittest.TestCase):
         def test_notfound(self):
@@ -215,8 +222,8 @@ if __name__ == '__main__':
             # Basic command test
             r = shell.ls('/')
             self.assertEqual(r.returncode, 0)
-            self.assertEqual(r.stderr, '')
-            self.assertTrue(r.stdout != '')
+            self.assertEqual(r.stderr, b(''))
+            self.assertTrue(r.stdout != (''))
 
         def test_underscores(self):
             # Underscore-replacement
@@ -224,15 +231,15 @@ if __name__ == '__main__':
             self.assertTrue('ssh-add' in c.name)
             r = c('-l')
             self.assertEqual(r.returncode, 0)
-            self.assertEqual(r.stderr, '')
-            self.assertTrue(r.stdout != '')
+            self.assertEqual(r.stderr, b(''))
+            self.assertTrue(r.stdout != b(''))
 
         def test_pipes(self):
             # Test basic pipe usage
             r = pipe(pipe.ls('/') | pipe.grep('-v', 'bin') | pipe.rot13() | pipe.rot13())
             self.assertEqual(r.returncode, [0,0,0,0])
-            self.assertTrue('bin' not in r.stdout)
-            self.assertEqual(r.stderr,'')
+            self.assertTrue(b('bin') not in r.stdout)
+            self.assertEqual(r.stderr, b(''))
 
         def test_pipe_madness(self):
             # Test broken usage
@@ -246,8 +253,8 @@ if __name__ == '__main__':
             # Name says all
             r = pipe(pipe.ls('/'))
             self.assertEqual(r.returncode, [0])
-            self.assertEqual(r.stderr, '')
-            self.assertTrue(r.stdout != '')
+            self.assertEqual(r.stderr, b(''))
+            self.assertTrue(r.stdout != b(''))
 
         def test_pipe_stderr(self):
             # Stderr redirection in the middle of the pipe
@@ -255,34 +262,39 @@ if __name__ == '__main__':
             self.assertEqual(r.returncode[0], 0)
             self.assertTrue(r.returncode[1] > 1)
             self.assertEqual(r.returncode[2], 0)
-            self.assertTrue('this-will-not-work' in r.stdout)
-            self.assertEqual(r.stderr, '')
+            self.assertTrue(b('this-will-not-work') in r.stdout)
+            self.assertEqual(r.stderr, b(''))
 
         def test_stderr(self):
             # Command with stderr
             r = shell.ls('/does/not/exist')
             self.assertTrue(r.returncode != 0)
-            self.assertEqual(r.stdout, '')
-            self.assertTrue(r.stderr != '')
+            self.assertEqual(r.stdout, b(''))
+            self.assertTrue(r.stderr != b(''))
 
         def test_withinput(self):
             # with inputstring
-            inp = 'Hello, world!'
+            inp = b('Hello, world!')
             r = shell.cat(input=inp)
             self.assertEqual(r.returncode, 0)
             self.assertEqual(inp, r.stdout)
-            self.assertEqual('', r.stderr)
+            self.assertEqual(b(''), r.stderr)
 
         def test_withio(self):
             # Use open filehandles
-            fd = open('/etc/resolv.conf')
+            fd = open('/etc/resolv.conf', 'rb')
             data = fd.read()
             fd.seek(0)
             r = shell.rot13(stdin=fd)
             fd.close()
             self.assertEqual(r.returncode, 0)
-            self.assertEqual(data.encode('rot13'), r.stdout)
-            self.assertEqual(r.stderr, '')
+            if PY3:
+                rot13 = bytes.maketrans(b('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'),
+                                        b('nopqrstuvwxyzabcdefghijklmNOPQRSTUVWXYZABCDEFGHIJKLM'))
+                self.assertEqual(data.translate(rot13), r.stdout)
+            else:
+                self.assertEqual(data.encode('rot13'), r.stdout)
+            self.assertEqual(r.stderr, b(''))
 
         def test_withoutredirect(self):
             # Run something with redirect=False
@@ -292,7 +304,7 @@ if __name__ == '__main__':
             self.assertEqual(r.stderr, None)
 
         def test_pipewithinput(self):
-            input = "Hello, world!"
+            input = b("Hello, world!")
             r = pipe(
                 pipe.caesar(10, input=input) |
                 pipe.caesar(10) |
@@ -300,10 +312,10 @@ if __name__ == '__main__':
             )
             self.assertEqual(r.returncode, [0,0,0])
             self.assertEqual(r.stdout, input)
-            self.assertEqual(r.stderr, '')
+            self.assertEqual(r.stderr, b(''))
 
         def test_pipewithhugeinput(self):
-            input = "123456789ABCDEF" * 1024
+            input = b("123456789ABCDEF") * 1024
             r = pipe(
                 pipe.caesar(10, input=input) |
                 pipe.caesar(10) |
@@ -311,6 +323,6 @@ if __name__ == '__main__':
             )
             self.assertEqual(r.returncode, [0,0,0])
             self.assertEqual(r.stdout, input)
-            self.assertEqual(r.stderr, '')
+            self.assertEqual(r.stderr, b(''))
 
     unittest.main()
