@@ -11,12 +11,6 @@
 # - A linux desktop
 # - pynotify and gtk to display notifications
 # - beautifulsoup for parsing html
-# - A few optional images downloadable from the same location as this script.
-#   Place these images in the same directory as this script.
-#   + brandweer_48x48.png
-#   + politie_48x48.png
-#   + ambulance_48x48.png
-#   + knrm_48x48.png
 # - libcanberra to play a sound when new alarms arrive (optional)
 #
 # (c)2011 Dennis Kaarsemaker 
@@ -64,8 +58,20 @@ regions = (
 def _escape(data):
     return data.replace('&','&amp;').replace('<','&lt;').replace('>','&gt;')
 
+class I(dict):
+    def __getitem__(self, item):
+        return 'http://alarmeringen.nl/static/images/icon_%s.png' % dict.__getitem__(self, item)
+
 class Alert(object):
     """Representation of a single message"""
+    icons = I({
+            'brandweer': 'fire',
+            'politie':   'police',
+            'ambulance': 'ambu',
+            'lifeliner': 'heli',
+            'knrm':      'boat',
+    })
+
     def __init__(self, date, time, who, region, text, recipients = None):
         self.time = '%s %s' % (date, time)
         self.who = who
@@ -89,21 +95,16 @@ class Alert(object):
         else:
             path = sys.modules[mod].__file__
         path = os.path.abspath(os.path.dirname(path))
-        img = 'file:///%s/%s_48x48.png' % (path, self.who.lower())
-        if not os.path.exists(img[7:]):
-            # Try to grab it from github
-            img = 'file:///%s/.cache/%s_48x48.png' % (os.path.expanduser('~'), self.who.lower())
-            if not os.path.exists(img[7:]):
-                try:
-                    fd = open(img[7:], 'w')
-                    url = 'https://github.com/seveas/hacks/raw/master/' + img[img.rfind('/')+1:]
-                    req = urllib.urlopen(url)
-                    if req.code == 404:
-                        raise IOError
-                    fd.write(req.read())
-                except IOError:
-                    img = None
-        notification = pynotify.Notification(title, _escape(text), img)
+        img = self.icons[self.who.lower()]
+        imgc = os.path.join(os.path.expanduser('~'), '.cache', os.path.basename(imgl))
+        if not os.path.exists(imgc):
+            with open(imgc, 'w') as fd:
+                req = urllib.urlopen(img)
+                if req.code == 404:
+                    raise IOError
+                fd.write(req.read())
+
+        notification = pynotify.Notification(title, _escape(text), 'file://' + imgc)
         notification.set_urgency(pynotify.URGENCY_CRITICAL)
         caps = pynotify.get_server_caps()
         if self.recipients and 'actions' in caps:
