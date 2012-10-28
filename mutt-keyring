@@ -12,6 +12,8 @@ import glib
 import sys
 import urllib
 import urlparse
+from ConfigParser import ConfigParser
+import os
 
 KEYRING_NAME = 'login'
 
@@ -27,10 +29,22 @@ def parse_url(url):
 
 urls = [parse_url(x) for x in sys.argv[1:]]
 glib.set_application_name('mutt')
+
 for id in gk.list_item_ids_sync(KEYRING_NAME):
     item = gk.item_get_info_sync(KEYRING_NAME, id)
     name = item.get_display_name()
+    url = None
     if name.startswith(('imap','smtp')):
         url = parse_url(name)
-        if url in urls:
-            print "set %s_pass=%s" % (url[0], item.get_secret())
+    elif name.startswith('Evolution Data Source'):
+        src = name.rsplit(None,1)[1]
+        cp = ConfigParser()
+        cp.read(os.path.join(os.path.expanduser('~'), '.config', 'evolution', 'sources', src + '.source'))
+        if cp.has_section('Authentication') and cp.has_section('Mail Account'):
+            url = ('imap', cp.get('Authentication', 'User'), cp.get('Authentication', 'Host'))
+        elif cp.has_section('Authentication') and cp.has_section('Mail Transport'):
+            url = ('smtp', cp.get('Authentication', 'User'), cp.get('Authentication', 'Host'))
+        elif cp.has_section('Authentication') and cp.has_section('Collection'):
+            url = ('imap', urllib.quote(cp.get('Collection', 'Identity')), 'imap.gmail.com')
+    if url in urls:
+        print "set %s_pass=%s" % (url[0], item.get_secret())
