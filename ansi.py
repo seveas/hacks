@@ -20,6 +20,11 @@ mode = lambda *args: "%s[%sm" % (esc, ';'.join([str(x) for x in args if x is not
 reset = mode(attr.normal)
 wrap = lambda text, *args: "%s%s%s" % (mode(*args), text, reset)
 
+erase_line = esc + '[K'
+erase_display = esc + '[2J'
+save_cursor = esc + '[s'
+restore_cursor = esc + '[u'
+
 def demo():
     import sys
     for dattr in sorted(attr.attr):
