@@ -10,6 +10,7 @@
 import gnomekeyring as gk
 import glib
 import sys
+import urllib
 import urlparse
 
 KEYRING_NAME = 'login'
@@ -20,6 +21,8 @@ def parse_url(url):
     username = url.username
     if ';' in username:
         username = username[:username.find(';')]
+    if '@' in username:
+        username = urllib.quote(username)
     return (scheme, username, url.hostname)
 
 urls = [parse_url(x) for x in sys.argv[1:]]
