@@ -75,14 +75,14 @@ if __name__ == '__main__':
             a = List([0,1])
             b = List([1,2])
             self.assertTrue(a is b)
-            self.assertEquals(a, [0,1])
+            self.assertEqual(a, [0,1])
 
         def testsubbuiltin(self):
             # Test subclassing of subclasses of (Singleton, list)
             a = List2([0,1])
             b = List2([1,2])
             self.assertTrue(a is b)
-            self.assertEquals(a, [0,1])
+            self.assertEqual(a, [0,1])
 
         def testnoinit(self):
             # Test classes that have no __init__ method
