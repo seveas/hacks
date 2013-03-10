@@ -66,6 +66,10 @@ nagios_uptime_report.pl
 A management pacifier, mail them uptime graphs monthly to keep them happy (or
 sad, if you didn't do your job properly).
 
+nma.pl
+------
+Send irssi notifications to your android phone when screen is detached.
+
 p2000
 -----
 Script to monitor and alert on p2000 (dutch emergency services) messages.
