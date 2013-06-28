@@ -1,116 +1,66 @@
 #!/usr/bin/python
 #
-# Grab a random desktop background from interfacelift.com with the correct
-# resolution and set it as background. Requirements: xrandr, gnome
+# Grab a random desktop background and set it as background. Requirements: xrandr, gnome, PIL
 #
-# (c) 2010 Dennis Kaarsemaker
+# (c) 2010-2013 Dennis Kaarsemaker
 
 import cStringIO as stringio
 import glob
 import os
-from PIL import Image
+from   PIL import Image
 import random
 import re
 import stat
+import stealenv
 import sys
-import subprocess
-import urllib2
+import requests
+from   whelk import shell
 
-DOWNLOAD_PATH = '/home/dennis/Pictures'
-INDEX = "http://interfacelift.com/wallpaper_beta/downloads/date/any/"
-DOWNLOAD_BASE = "http://interfacelift.com/wallpaper_beta/grab/"
-GCONF_KEY = "/desktop/gnome/background/picture_filename"
-GSETTINGS_KEY = ("org.gnome.desktop.background", "picture-uri")
+requests.utils.default_user_agent = lambda: 'Mozilla/5.0 (X11; Ubuntu; Linux i686; rv:20.0) Gecko/20100101 Firefox/20.0'
+download_path = '/home/dennis/Pictures/wallpapers'
 
-def get_resolution():
-    xrandr_output = subprocess.Popen(["/usr/bin/xrandr"],stdout=subprocess.PIPE).communicate()[0]
-    resolution = re.search(r"current\s+(\d+ x \d+)", xrandr_output).group(1)
-    return resolution.replace(' ','')
+class DownloadError(Exception):
+    pass
 
-def set_background(path):
-    # Lazy!
-    subprocess.call(["gconftool-2", "--set", GCONF_KEY, "--type", "string", path])
-    subprocess.call(["gsettings", "set", "org.gnome.desktop.background", "picture-uri", "file://" + path])
+class IfLift(object):
+    index = "aHR0cDovL2ludGVyZmFjZWxpZnQuY29tL3dhbGxwYXBlci9kb3dubG9hZHMvZGF0ZS9hbnkv==".decode('base64')
+    download_base = "aHR0cDovL2ludGVyZmFjZWxpZnQuY29tL3dhbGxwYXBlci83eXo0bWExLw==".decode('base64')
 
-def set_gdm_background(path):
-#    from gdm2.gdm2gconf import GDM2Theme as gt
-#    gt = gt()
-#    gt.DEBUG = False
-#    gt.SetWallpaper(path, False)
-    with open('/usr/share/images/xsplash/bg.jpg','w') as wfd:
-        with open(path, 'r') as rfd:
-            wfd.write(rfd.read())
-
-def import_env(find_exe):
-    for d in os.listdir('/proc'):
-        if not d.isdigit():
-            continue
-        d = os.path.join('/proc', d)
-        try:
-            exe = os.readlink(os.path.join(d, 'exe'))
-        except OSError:
-            continue
-        if exe == find_exe:
-            uid = os.stat(d)[stat.ST_UID]
-            env = open(os.path.join(d, 'environ')).read()
-            env = dict([x.split('=', 1) for x in env.split('\x00') if x])
-            os.environ.update(env)
-            return uid
-    else:
-        print "Process %s not running" % find_exe
-        sys.exit(1)
-
-class InterfaceLift(object):
-    def update(self, resolution):
-        for i in range(5):
-            try:
-                page = self.random_page()
-                id_name = self.random_image(page)
-                return self.download_image(id_name, resolution)
-            except IOError: # Bad image
-                continue
-            except urllib2.URLError: # Not online?
-                break
-        pictures = glob.glob(os.path.join(DOWNLOAD_PATH, '*_%s.*' % resolution))
-        if not pictures:
-            return None
-        return random.choice(pictures)
-
-    def random_page(self):
-        html = urllib2.urlopen(INDEX).read()
+    def random_image(self, resolution):
+        html = re.sub('<.*?>', '', requests.get(self.index).text)
         pages = re.search("page \d+ of (\d+)", html).group(1)
         rand = random.randint(1, int(pages))
-        html = urllib2.urlopen("%sindex%d.html" % (INDEX, rand)).read()
-        return html
-    
-    def random_image(self, html):
+        html = requests.get("%sindex%d.html" % (self.index, rand)).text
         images = re.findall('<img[^>]*previews/(.*?)"', html)
-        return random.choice(images)
-    
-    def download_image(self, name, resolution):
-        name, ext = name.rsplit('.', 1)
+        name,ext = random.choice(images).rsplit('.', 1)
         name = '%s_%s.%s' % (name, resolution, ext)
-        dpath = os.path.join(DOWNLOAD_PATH, name)
+        dpath = os.path.join(download_path, name)
         if not os.path.exists(dpath):
-            img = urllib2.urlopen(DOWNLOAD_BASE + name).read()
+            img = requests.get(self.download_base + name).content
             Image.open(stringio.StringIO(img))
             with open(dpath, 'w') as fd:
                 fd.write(img)
         return dpath
 
 def main():
-    uid = import_env('/usr/bin/nautilus')
-    resolution = get_resolution()
+    uid = stealenv.from_name('/usr/bin/nautilus')
+    resolution = re.search(r"current\s+(\d+ x \d+)", shell.xrandr().stdout).group(1).replace(' ', '')
+    path = None
+
     if len(sys.argv) == 2:
         path = sys.argv[1]
     else:
-        klass = InterfaceLift # In the future there could be more classes
-        path = klass().update(resolution)
+        klass = IfLift # In the future there could be more classes
+        try:
+            path = klass().random_image(resolution)
+        except DownloadError:
+            pictures = glob.glob(os.path.join(download_path, '*_%s.*' % resolution))
+            if pictures:
+                path = random.choice(pictures)
     if path:
-        if os.geteuid() == 0:
-            set_gdm_background(path)
-            os.setuid(uid)
-        set_background(os.path.abspath(path))
+        shell.gsettings("set", "org.gnome.desktop.background", "picture-uri", "file://" + os.path.abspath(path))
+    else:
+        print "No image found"
 
 if __name__ == '__main__':
     main()
