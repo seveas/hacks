@@ -6,12 +6,25 @@
 import os
 import sys
 
-def stealenv(pid, update=False):
+def from_pid(pid, update=False):
      env = open(os.path.join('/proc/%d/environ' % pid)).read()
      env = dict([x.split('=', 1) for x in env.split('\x00') if x])
      if update:
         os.environ.update(env)
      return env
+
+def from_name(name, update=False):
+    for d in os.listdir('/proc'):
+        if not d.isdigit():
+            continue
+        try:
+            exe = os.readlink(os.path.join('/proc', d, 'exe'))
+        except OSError:
+            continue
+        if exe == name:
+            return from_pid(int(d), update)
+    else:
+        print "Process %s not running" % find_exe
 
 if __name__ == '__main__':
     import optparse
@@ -48,7 +61,7 @@ formats, usable by shells and other languages."""
             opts.sh = True
 
     pid = int(args[0])
-    env = stealenv(pid, False)
+    env = from_pid(pid, False)
 
     if opts.json:
         import simplejson
