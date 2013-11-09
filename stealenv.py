@@ -50,18 +50,24 @@ formats, usable by shells and other languages."""
                  help='Output null-terminated strings and a trailing null')
 
     opts, args = p.parse_args()
-    if len(args) != 1 or not args[0].isdigit():
-        p.error('Must specify exactly one pid')
-    if sum([opts.sh, opts.csh, opts.json, opts.zero]) > 1:
-        p.error('Must specify exactly one output format')
+    if len(args) < 1:
+        p.error('Must specify a pid or application to steal from')
+    if sum([opts.sh, opts.csh, opts.json, opts.zero, len(args) > 1]) > 1:
+        p.error('Must specify exactly one output format or specify a command line')
     elif sum([opts.sh, opts.csh, opts.json, opts.zero]) == 0:
         if os.environ['SHELL'].endswith('csh'):
             opts.csh = True
         else:
             opts.sh = True
 
-    pid = int(args[0])
-    env = from_pid(pid, False)
+    if args[0].isdigit():
+        env = from_pid(int(args[0], False))
+    else:
+        env = from_name(args[0], False)
+
+    if len(args) > 1:
+        os.environ.update(env)
+        os.execve(args[1], args[1:], os.environ)
 
     if opts.json:
         import simplejson
