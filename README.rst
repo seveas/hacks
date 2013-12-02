@@ -95,11 +95,6 @@ run-single-cron
 ---------------
 Runs a single job from a crontab exactly as cron would do it
 
-shell.py
---------
-A pythonic version of perls 'use Shell;'. Syntaxtic sugar around subprocess
-that makes creating processes and pipelines even easier.
-
 singleton.py
 ------------
 Pure-python subclassable singleton class that uses __new__ instead of the
