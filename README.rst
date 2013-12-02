@@ -91,6 +91,10 @@ reset_password
 --------------
 Boot from a live cd and run this to reset all passwords it finds.
 
+run-single-cron
+---------------
+Runs a single job from a crontab exactly as cron would do it
+
 shell.py
 --------
 A pythonic version of perls 'use Shell;'. Syntaxtic sugar around subprocess
