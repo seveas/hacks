@@ -35,7 +35,7 @@ Make networkmanager forget passwords immediately after authenticating. This
 really should be a feature in n-m itself but sadly isn't. (The feature does
 exists in the most recent version of n-m)
 
-fake-time.c
+fake_time.c
 -----------
 Make your system think differently about time.
 
@@ -74,8 +74,8 @@ p2000
 -----
 Script to monitor and alert on p2000 (dutch emergency services) messages.
 
-pcat
-----
+pcat.c
+------
 A cat that works on fifos (created with mkfifo).
 
 progressbar.py
@@ -87,8 +87,8 @@ rainbow
 -------
 Colorize output with a rainbow pattern. For those boring days.
 
-reset_password
---------------
+reset_passwords
+---------------
 Boot from a live cd and run this to reset all passwords it finds.
 
 run-single-cron
