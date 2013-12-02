@@ -29,12 +29,6 @@ cisco-crypt.py
 Python module and standalone script for encrypting/decrypting cisco-style
 encrypted passwords in .pcf files for the vpn client.
 
-deletepassphrases
------------------
-Make networkmanager forget passwords immediately after authenticating. This
-really should be a feature in n-m itself but sadly isn't. (The feature does
-exists in the most recent version of n-m)
-
 fake_time.c
 -----------
 Make your system think differently about time.
