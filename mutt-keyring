@@ -34,10 +34,9 @@ for id in gk.list_item_ids_sync(KEYRING_NAME):
     item = gk.item_get_info_sync(KEYRING_NAME, id)
     name = item.get_display_name()
     url = None
-    if name.startswith(('imap','smtp')):
-        url = parse_url(name)
-    elif name.startswith('Evolution Data Source'):
-        src = name.rsplit(None,1)[1]
+    if name.startswith('Evolution Data Source'):
+        attrs = gk.item_get_attributes_sync(KEYRING_NAME, id)
+        src = attrs['e-source-uid']
         cp = ConfigParser()
         cp.read(os.path.join(os.path.expanduser('~'), '.config', 'evolution', 'sources', src + '.source'))
         if cp.has_section('Authentication') and cp.has_section('Mail Account'):
