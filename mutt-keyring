@@ -46,4 +46,4 @@ for id in gk.list_item_ids_sync(KEYRING_NAME):
         elif cp.has_section('Authentication') and cp.has_section('Collection'):
             url = ('imap', urllib.quote(cp.get('Collection', 'Identity')), 'imap.gmail.com')
     if url in urls:
-        print "set %s_pass=%s" % (url[0], item.get_secret())
+        print "set %s_pass='%s'" % (url[0], item.get_secret())
