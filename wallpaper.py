@@ -24,15 +24,16 @@ class DownloadError(Exception):
 
 class IfLift(object):
     index = "aHR0cDovL2ludGVyZmFjZWxpZnQuY29tL3dhbGxwYXBlci9kb3dubG9hZHMvZGF0ZS9hbnkv==".decode('base64')
-    download_base = "aHR0cDovL2ludGVyZmFjZWxpZnQuY29tL3dhbGxwYXBlci83eXo0bWExLw==".decode('base64')
+    download_base = "aHR0cHM6Ly9pbnRlcmZhY2VsaWZ0LmNvbS93YWxscGFwZXIvN3l6NG1hMS8=".decode('base64')
 
     def random_image(self, resolution):
-        html = re.sub('<.*?>', '', requests.get(self.index).text)
-        pages = re.search("page \d+ of (\d+)", html).group(1)
+        html = requests.get(self.index).text
+        pages = max([int(x) for x in re.findall("index(\d+)\.html", html)])
         rand = random.randint(1, int(pages))
         html = requests.get("%sindex%d.html" % (self.index, rand)).text
         images = re.findall('<img[^>]*previews/(.*?)"', html)
         name,ext = random.choice(images).rsplit('.', 1)
+        name = name.rsplit('_', 1)[0]
         name = '%s_%s.%s' % (name, resolution, ext)
         dpath = os.path.join(download_path, name)
         if not os.path.exists(dpath):
