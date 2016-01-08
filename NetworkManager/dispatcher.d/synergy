@@ -1,0 +1,22 @@
+#!/bin/sh
+#
+# Autostart synergy when I'm connected to the right network (next to my
+# desktop)
+#
+# Hardcodes the user, network, and IP address of the synergy server 'cause I'm
+# a lazy bugger.
+
+(
+device=$1
+state=$2
+devtype="$(nmcli -t -f GENERAL.TYPE device show "$device")"
+devtype=${devtype#*:}
+case $devtype,$state,$IP4_ADDRESS_0 in
+    ethernet,down,*)
+        sudo -u dennis killall synergyc
+        ;;
+    ethernet,up,10.155.73.*)
+        sudo -u dennis DISPLAY=:0 synergyc -d WARNING 10.155.73.50
+        ;;
+esac
+) 2>&1 | logger --id=$$ --tag=nm-dispatch-synergy

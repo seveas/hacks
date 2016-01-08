@@ -1,0 +1,23 @@
+#!/bin/sh
+#
+# Whenever a connection comes up, search for an autologin script in
+# ../autologin.d and execute it if found.
+#
+# Scripts must be named after a sanitized version of the connection name. The
+# sanitization is that the name must be downcased, and all characters other
+# than ascii letters, numbers and underscore must be replaced with an
+# underscore.
+#
+# e.g. 'WiFi in de trein' becomes wifi_in_de_trein
+
+test "$2" != up && exit 0
+
+(
+    dev="$1"
+    conn="$(nmcli device show "$dev" | sed -ne 's/GENERAL.CONNECTION: *//p')"
+    connf="$(echo "$conn" | tr A-Z a-z | sed -e 's/[^a-z0-9_]/_/g')"
+    connp="$(dirname "$(dirname "$(readlink -f "$0")")")/autologin.d/$connf"
+    if [ -f "$connp" ] && [ -x "$connp" ]; then
+        exec $connp
+    fi
+) 2>&1 | logger --id=$$ --tag=nm-dispatch-autologin

@@ -60,6 +60,19 @@ nagios_uptime_report.pl
 A management pacifier, mail them uptime graphs monthly to keep them happy (or
 sad, if you didn't do your job properly).
 
+NetworkManager/dispatcher.d/autologin
+-------------------------------------
+Automatically log in to wireless networks that have a captive portal. This
+script doesn't actually login, but dispatches to actual login scripts.
+
+NetworkManager/dispatcher.d/synergy
+-----------------------------------
+Autostart synergy when connected to the right network
+
+NetworkManager/autologin.d/wifi_in_de_trein
+-------------------------------------------
+Automatically log in to the wifi in dutch trains.
+
 nma.pl
 ------
 Send irssi notifications to your android phone when screen is detached.

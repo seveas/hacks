@@ -95,7 +95,7 @@ class Alert(object):
         else:
             path = sys.modules[mod].__file__
         path = os.path.abspath(os.path.dirname(path))
-        img = self.icons[self.who.lower()]
+        imgl = self.icons[self.who.lower()]
         imgc = os.path.join(os.path.expanduser('~'), '.cache', os.path.basename(imgl))
         if not os.path.exists(imgc):
             with open(imgc, 'w') as fd:

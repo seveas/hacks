@@ -1,0 +1,60 @@
+#!/usr/bin/phantomjs
+/*
+ * Log in to the public wifi in the dutch trains
+ * 
+ * Open a url that will return a 404 response, then follow the following state
+ * diagram:
+ *
+ * - If the URL fails to load, exit. This is either because we hit the 404 and
+ *   are thus already logged in, or because the wifi thing is overloaded again
+ *   and it makes no sense to continue
+ * - If the URL does load, try to find the loginpage. If found, log in
+ * - If a popup window opens, it must be the confirmation window. We have
+ *   succeeded and exit.
+ */
+ 
+"use strict";
+
+console.log("WiFi in de trein autologin starting...");
+
+function say(page, message) {
+    console.log("Page " + page.id + " " + message);
+}
+
+var pagecount = 0;
+function decorate(page) {
+    page.id = ++pagecount;
+    page.onConsoleMessage = function(message) {
+        say(page, "window console: " + message);
+    }
+    page.onPageCreated = function(newpage) {
+        decorate(newpage);
+        say(newpage, "created");
+    }
+    page.onLoadFinished = function(status) {
+        say(page, "finished loading (" + status + "): " + page.url);
+        if(page.id == 2) {
+            say(page, "Confirmation page loaded. Great success!");
+            phantom.exit();
+        };
+        if(status != "success")
+            phantom.exit();
+        page.evaluate(function() {
+            console.log("Searching for login page");
+            try { $; } catch(err) { return; }
+            var button = $(".button");
+            var check = $("input:checkbox");
+            if(check) {
+                console.log("Found login page, attempting to log in");
+                check.attr('checked', true);
+                button.trigger('click');
+            }
+        });
+    }
+    return page;
+}
+decorate(require('webpage').create()).open('http://www.google.com/intentional_404');
+
+ /* 
+  * vim:syntax=javascript
+  */

@@ -29,6 +29,8 @@ class BuienRadar(object):
     """BuienRadar GUI, display dutch weather radar images"""
 
     cache_dir = os.path.join(os.path.expanduser('~'), '.cache', 'buienradar')
+    if not os.path.exists(cache_dir):
+        os.makedirs(cache_dir)
     countries = {'nl':
                 _t('Nederland',
                    'http://www.buienradar.nl/kaart1x1-550.gif',
