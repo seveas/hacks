@@ -1,0 +1,103 @@
+#!/bin/bash
+#
+# SSH to a remote, and possibly run a command inside the remote repo
+#
+# Examples:
+#
+# Open a shell in the remote repository:
+#
+# $ git ssh origin
+#
+# Run gc remotely
+#
+# $ git ssh origin git gc
+#
+# Or just any random command, maybe du to check a repo's size:
+#
+# $ git ssh origin du -shc .
+#
+# (c) 2015 Dennis Kaarsemaker
+# Based on an idea of Chern Jie Lim (https://github.com/chernjie/git-ssh)
+
+USAGE="[ssh options] <remote> [command]"
+. $(git --exec-path)/git-sh-setup
+
+declare -a ssh_opts
+declare -a ssh_args
+
+# Parse an option string like -vvt and return whether the next argument to 'git
+# ssh' is an argument to an ssh option, e.g. when using 'git ssh -vvl root
+# origin', this returns true for -vvl, signaling the option checker to skip the
+# next argument.
+expect_more() {
+    opt="${1:1}"
+    while [ -n "$opt" ]; do
+        cur="${opt:0:1}"
+        opt="${opt:1}"
+        [[ "$cur" =~ [tT] ]] && seen_tty=yes
+        if [[ "$cur" =~ [bcDeFIiLlmOopRSWw] ]]; then
+            test -z "$opt"
+            return
+        fi
+    done
+    return 1
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -*)
+            # SSH option. Store and skip.
+            expect_more "$1" && { ssh_opts[${#ssh_opts[@]}]="$1"; shift; }
+            ssh_opts[${#ssh_opts[@]}]="$1"; shift
+            ;;
+        *)
+            # First non-option is the remote
+            if [ -z "$remote" ]; then
+                remote="$1";
+                shift
+            else
+                # When more non-options appear, all other arguments are part of the
+                # command to execute.
+                while [ $# -gt 0 ]; do ssh_args[${#ssh_args[@]}]="$1"; shift; done
+            fi
+            ;;
+    esac
+done
+
+# A remote is madatory. Find and parse the URl for the remote
+test -z "$remote" && usage
+remote_url=$(git config remote."$remote".url)
+case "$remote_url" in
+    '')
+        die "Could not find url for $remote"
+        ;;
+    file://*|https://*|https://*|git://*)
+        die "Protocol not supported: ${remote_url%%://}"
+        ;;
+esac
+
+case "$remote_url" in
+    git+ssh://*|ssh://*)
+        url="${remote_url#*://}"
+        host="${url%%/*}"
+        path="${url#*/}"
+        ;;
+    *)
+        host="${remote_url%%:*}"
+        path="${remote_url#*:}"
+        ;;
+esac
+
+# If we don't specify a command, we need a shell. Started in a bit of a special
+# way as we need to cd first.
+if [ ${#ssh_args[@]} -eq 0 ]; then
+    if [ "$seen_tty" != yes ]; then
+        ssh_opts[${#ssh_opts[@]}]="-t"
+    fi
+    ssh_args[0]="${SHELL:-/bin/bash}"
+    ssh_args[1]="-l"
+fi
+
+# And now we can actually run the ssh command safely, quoting things wither
+# ourselves or using git rev-parse --sq-quote
+exec ssh "$host" "${ssh_opts[@]}" "cd \"$path\" && $(git rev-parse --sq-quote "${ssh_args[@]}")"

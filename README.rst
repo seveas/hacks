@@ -38,6 +38,10 @@ gateway_identify.py
 xchat script that prints the IP address/hostname of users connecting from a
 known gateway on freenode.
 
+git-ssh
+-------
+Easy ssh access to remote git hosts and repos.
+
 hilight.py
 ----------
 xchat script that copies all hilighting messages to a separate channel-like
