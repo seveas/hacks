@@ -42,6 +42,10 @@ git-ssh
 -------
 Easy ssh access to remote git hosts and repos.
 
+gnome-keyring-dump
+------------------
+Dump the contents of the gnome keyring
+
 hilight.py
 ----------
 xchat script that copies all hilighting messages to a separate channel-like

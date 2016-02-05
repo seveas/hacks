@@ -1,0 +1,16 @@
+#!/usr/bin/python3
+
+import json
+import secretstorage
+import sys
+
+bus = secretstorage.dbus_init()
+collection = secretstorage.get_default_collection(bus)
+all = []
+for secret in collection.get_all_items():
+    all.append({
+        'label': secret.get_label(),
+        'attrs': secret.get_attributes(),
+        'secret': secret.get_secret().decode('us-ascii'),
+    })
+json.dump(all, sys.stdout, sort_keys=True, indent=4)
