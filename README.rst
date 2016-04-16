@@ -114,6 +114,11 @@ stealenv.py
 Steal (well, output) a process in a variety of formats, usable by shells and
 other languages.
 
+subsetsum.py
+------------
+Find a subset of a set of integers with a given sum. Useful for "for €50 in
+receipts, you get a free something".
+
 suid_script_wrapper.c
 ---------------------
 When sudo is not available, you can use this to let people run a script as
