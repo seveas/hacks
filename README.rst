@@ -7,12 +7,6 @@ ansi.py
 -------
 ANSI terminal colors demo. Glorified readme, reusable as lib.
 
-buienradar
-----------
-Tiny PyGTK app that downloads and displays dutch or west-european radarimages
-that show where it rains. Loops over 1-24 hours worth of images and has
-keyboard control.
-
 check_trace
 -----------
 Nagios plugin to resolve a check whether a hostname is fully resolvable, from
