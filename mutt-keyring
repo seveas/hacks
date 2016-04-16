@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 #
 # Fetch passwords for imap/smtp accounts from gnome-keyring
 # Adding passwords to gnome-keyring is up to yourself. Passwords added
@@ -7,43 +7,56 @@
 # Usage in .muttrc:
 # source "~/bin/mutt-keyring $folder $smtp_url|"
 
-import gnomekeyring as gk
-import glib
-import sys
-import urllib
-import urlparse
-from ConfigParser import ConfigParser
+import configparser
+import glob
 import os
+import secretstorage
+import sys
+import urllib.parse
 
-KEYRING_NAME = 'login'
+def main():
+    urls = [parse_url(x) for x in sys.argv[1:]]
+    bus = secretstorage.dbus_init()
+    collection = secretstorage.get_default_collection(bus)
+    root = os.path.join(os.path.expanduser('~'), '.config', 'evolution', 'sources')
+
+    for source in glob.glob(os.path.join(root, '*.source')):
+        uid = os.path.splitext(os.path.basename(source))[0]
+        proto, user, host, parent = read_source(source)
+        if (proto, user, host) in urls:
+            secretd = {
+                'xdg:schema': 'org.gnome.Evolution.Data.Source',
+                'e-source-uid': uid,
+            }
+            secrets = list(collection.search_items(secretd))
+            if not secrets and parent:
+                secretd['e-source-uid'] = parent
+                secrets = list(collection.search_items(secretd))
+            if secrets:
+                print("set %s_pass='%s'" % (proto, secrets[0].get_secret().decode('utf-8')))
+
+def read_source(file):
+    source = configparser.ConfigParser()
+    source.read(file)
+    user = host = proto = None
+    parent = source['Data Source']['parent']
+    if 'Authentication' in source:
+        user = source['Authentication']['user']
+        host = source['Authentication']['host']
+    for key in ('Mail Account', 'Mail Transport'):
+        if key in source:
+            proto = source[key]['backendname']
+            if proto == 'imapx':
+                proto = 'imap'
+    return (proto, user, host, parent)
 
 def parse_url(url):
-    url = urlparse.urlsplit(url)
+    url = urllib.parse.urlsplit(url)
     scheme = 'imap' if url.scheme.startswith('imap') else 'smtp'
     username = url.username
     if ';' in username:
         username = username[:username.find(';')]
-    if '@' in username:
-        username = urllib.quote(username)
     return (scheme, username, url.hostname)
 
-urls = [parse_url(x) for x in sys.argv[1:]]
-glib.set_application_name('mutt')
-
-for id in gk.list_item_ids_sync(KEYRING_NAME):
-    item = gk.item_get_info_sync(KEYRING_NAME, id)
-    name = item.get_display_name()
-    url = None
-    if name.startswith('Evolution Data Source'):
-        attrs = gk.item_get_attributes_sync(KEYRING_NAME, id)
-        src = attrs['e-source-uid']
-        cp = ConfigParser()
-        cp.read(os.path.join(os.path.expanduser('~'), '.config', 'evolution', 'sources', src + '.source'))
-        if cp.has_section('Authentication') and cp.has_section('Mail Account'):
-            url = ('imap', cp.get('Authentication', 'User'), cp.get('Authentication', 'Host'))
-        elif cp.has_section('Authentication') and cp.has_section('Mail Transport'):
-            url = ('smtp', cp.get('Authentication', 'User'), cp.get('Authentication', 'Host'))
-        elif cp.has_section('Authentication') and cp.has_section('Collection'):
-            url = ('imap', urllib.quote(cp.get('Collection', 'Identity')), 'imap.gmail.com')
-    if url in urls:
-        print "set %s_pass='%s'" % (url[0], item.get_secret())
+if __name__ == '__main__':
+    main()
