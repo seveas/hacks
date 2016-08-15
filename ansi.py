@@ -142,7 +142,7 @@ def demo_cursor():
     matrix = [(x,y) for x in range(2,width) for y in range(2,height-1)]
     count = len(matrix)
     random.shuffle(matrix)
-    arrows = '\xe2\xac\x85\xe2\xac\x86\xe2\xac\x87\xe2\xac\x88\xe2\xac\x89\xe2\xac\x8a\xe2\xac\x8b'.decode('utf-8')
+    arrows = b'\xe2\xac\x85\xe2\xac\x86\xe2\xac\x87\xe2\xac\x88\xe2\xac\x89\xe2\xac\x8a\xe2\xac\x8b'.decode('utf-8')
     for (current, (x, y)) in enumerate(matrix):
         c = random.randint(17, 231)
         sys.stdout.write(cursor.position(y,x) + wrap(random.choice(arrows), fgcolor.xterm(c)))
@@ -157,10 +157,12 @@ if __name__ == '__main__':
     import termios
     import fcntl
     import random
+    if sys.version_info[0] < 3:
+        input = raw_input
     demo_colors()
-    raw_input(wrap("\nHit enter to continue", attr.bright) + cursor.hide)
+    input(wrap("\nHit enter to continue", attr.bright) + cursor.hide)
     demo_cursor()
-    raw_input(cursor.up + cursor.column(1) + wrap("\nHit enter to continue", attr.bright) + cursor.hide)
+    input(cursor.up + cursor.column(1) + wrap("\nHit enter to continue", attr.bright) + cursor.hide)
     print(cursor.show + erase_display('all'))
 
 del demo_colors
