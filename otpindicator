@@ -1,0 +1,67 @@
+#!/usr/bin/python3
+#
+# Quick hack to have a totp token in the unity status bar. Pass the totp key as
+# commandline argument. Only does 6 digit, 30 second totp tokens.
+
+import gi
+gi.require_version('GObject', '2.0')
+gi.require_version('Gtk', '3.0')
+gi.require_version('AppIndicator3', '0.1')
+from gi.repository import GObject as gobject
+from gi.repository import Gtk as gtk
+from gi.repository import AppIndicator3 as appindicator
+import pyotp
+import signal
+import sys
+import time
+
+signal.signal(signal.SIGINT, signal.SIG_DFL)
+APPINDICATOR_ID = 'totp'
+
+step=30
+icons = {
+    100: 'battery-full-symbolic',
+    60: 'battery-good-symbolic',
+    40: 'battery-low-symbolic',
+    20: 'battery-caution-symbolic',
+    10: 'battery-empty-symbolic',
+}
+
+def main():
+    token = sys.argv[1]
+
+    indicator = appindicator.Indicator.new(APPINDICATOR_ID, icons[100], appindicator.IndicatorCategory.SYSTEM_SERVICES)
+    indicator.set_status(appindicator.IndicatorStatus.ACTIVE)
+    indicator.set_label('......', '888888')
+    set_token(indicator, token)
+
+    menu = gtk.Menu()
+    item_quit = gtk.MenuItem('Quit')
+    item_quit.connect('activate', lambda source: gtk.main_quit())
+    menu.append(item_quit)
+    menu.show_all()
+    indicator.set_menu(menu)
+
+    gobject.timeout_add(1000 - (time.time() % 1) * 1000, second_sync, indicator, token)
+
+    gtk.main()
+
+def second_sync(indicator, token):
+    gobject.timeout_add(1000, set_token, indicator, token)
+    set_token(indicator, token)
+
+def set_token(indicator, token):
+    otp = pyotp.TOTP(token).now()
+    pct_remaining = int((step-(time.time() % step))/step * 100)
+    for icon in sorted(icons):
+        if icon > pct_remaining:
+            break
+    icon = icons[icon]
+    if indicator.get_icon() != icon:
+        indicator.set_icon(icon)
+    if indicator.get_label() != otp:
+        indicator.set_label(otp, '888888')
+    return True
+ 
+if __name__ == "__main__":
+    main()

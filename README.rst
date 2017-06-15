@@ -79,6 +79,10 @@ nma.pl
 ------
 Send irssi notifications to your android phone when screen is detached.
 
+otpindicator
+------------
+An appindicator that can display a totp token
+
 p2000
 -----
 Script to monitor and alert on p2000 (dutch emergency services) messages.
