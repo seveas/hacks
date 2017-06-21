@@ -3,6 +3,7 @@
 # Quick hack to have a totp token in the unity status bar. Pass the totp key as
 # commandline argument. Only does 6 digit, 30 second totp tokens.
 
+import dbus.mainloop.glib
 import gi
 gi.require_version('GObject', '2.0')
 gi.require_version('Gtk', '3.0')
@@ -11,6 +12,7 @@ from gi.repository import GObject as gobject
 from gi.repository import Gtk as gtk
 from gi.repository import Gdk as gdk
 from gi.repository import AppIndicator3 as appindicator
+import NetworkManager
 import pyotp
 import signal
 import sys
@@ -30,23 +32,34 @@ icons = {
 
 def main():
     token = sys.argv[1]
+    vpn = None
+    if len(sys.argv) > 2:
+        vpn = sys.argv[2]
+        dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
 
     indicator = appindicator.Indicator.new(APPINDICATOR_ID, icons[100], appindicator.IndicatorCategory.SYSTEM_SERVICES)
     indicator.set_status(appindicator.IndicatorStatus.ACTIVE)
     indicator.set_label('......', '888888')
     indicator.connect('scroll-event', lambda ind, *_: gtk.Clipboard.get(gdk.SELECTION_CLIPBOARD).set_text(ind.get_label(), -1))
     set_token(indicator, token)
+    if vpn:
+        agent = SecretAgent(vpn, indicator)
 
     menu = gtk.Menu()
-    item_quit = gtk.MenuItem('Quit')
-    item_quit.connect('activate', lambda source: gtk.main_quit())
-    menu.append(item_quit)
+    item = gtk.MenuItem('Quit')
+    item.connect('activate', lambda source: gtk.main_quit())
+    menu.append(item)
+    if vpn:
+        item = gtk.MenuItem('Activate VPN')
+        item.connect('activate', lambda source: activate_vpn(vpn))
+    menu.append(item)
     menu.show_all()
     indicator.set_menu(menu)
 
     gobject.timeout_add(1000 - (time.time() % 1) * 1000, second_sync, indicator, token)
 
     gtk.main()
+
 
 def second_sync(indicator, token):
     gobject.timeout_add(1000, set_token, indicator, token)
@@ -64,6 +77,28 @@ def set_token(indicator, token):
     if indicator.get_label() != otp:
         indicator.set_label(otp, '888888')
     return True
+
+def activate_vpn(vpn):
+    for connection in NetworkManager.Settings.ListConnections():
+        settings = connection.GetSettings()['connection']
+        if settings['id'] == vpn:
+            NetworkManager.NetworkManager.ActivateConnection(connection, "/", "/")
+
+class SecretAgent(NetworkManager.SecretAgent):
+    def __init__(self, vpn, indicator):
+        self.vpn = vpn
+        self.indicator = indicator
+        super(SecretAgent, self).__init__('net.seveas.otpindicator')
+
+    def GetSecrets(self, settings, connection, setting_name, hints, flags):
+        try:
+            if setting_name != 'vpn' or settings['connection']['id'] != self.vpn:
+                return {}
+            return {setting_name: {'secrets': {'password': self.indicator.get_label()}}}
+        except:
+            import traceback
+            traceback.print_exc()
+            return {}
  
 if __name__ == "__main__":
     main()
