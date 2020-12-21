@@ -1,0 +1,43 @@
+#!/usr/bin/env python3
+#
+# How to get a slack API token
+#
+# From https://github.com/yuya373/emacs-slack/tree/1f6a40faec0d8d9c9de51c444508d05a3e995ccd#how-to-get-token
+# - Using chrome or firefox, open and sign into the slack customization page, e.g. https://my.slack.com/customize
+# - Right click anywhere on the page and choose "inspect" from the context menu. This will open the developer tools.
+# - Find the console (it's one of the tabs in the developer tools window)
+# - At the prompt ("> ") type the following: window.prompt("your api token is: ", TS.boot_data.api_token)
+# - Copy the displayed token elsewhere, and close the window.
+
+import argparse
+import os
+import sys
+
+from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
+
+client = WebClient(token=os.getenv("SLACK_TOKEN"))
+
+parser = argparse.ArgumentParser(description="Send messages to slack channels")
+parser.add_argument("channel", metavar="CHANNEL", nargs=1)
+parser.add_argument("message", metavar="MESSAGE", nargs="*")
+parser.add_argument("--split-lines", default=False, action='store_true')
+parser.add_argument("--mono", default=False, action='store_true')
+args = parser.parse_args()
+
+def send(msg):
+    if args.mono:
+       msg = "```%s```" % msg
+    try:
+        response = client.chat_postMessage(channel=args.channel[0], text=msg)
+    except SlackApiError as e:
+        print("Got an error: " + e.response['error'], file=sys.stderr)
+
+if args.message:
+    send(" ".join(args.message))
+else:
+    if not args.split_lines:
+        send(sys.stdin.read())
+    else:
+        for line in sys.stdin:
+            send(line)

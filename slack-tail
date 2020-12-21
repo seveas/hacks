@@ -1,0 +1,134 @@
+#!/usr/bin/env python3
+#
+# How to get a slack API token
+#
+# From https://github.com/yuya373/emacs-slack/tree/1f6a40faec0d8d9c9de51c444508d05a3e995ccd#how-to-get-token
+# - Using chrome or firefox, open and sign into the slack customization page, e.g. https://my.slack.com/customize
+# - Right click anywhere on the page and choose "inspect" from the context menu. This will open the developer tools.
+# - Find the console (it's one of the tabs in the developer tools window)
+# - At the prompt ("> ") type the following: window.prompt("your api token is: ", TS.boot_data.api_token)
+# - Copy the displayed token elsewhere, and close the window.
+
+import argparse
+import os
+import sys
+from pprint import pprint
+import traceback
+import re
+
+sys.path.insert(0, os.path.dirname(__file__))
+import ansi
+
+from slack_sdk.rtm import RTMClient
+
+parser = argparse.ArgumentParser(description="Send messages to slack channels")
+parser.add_argument('--until', metavar='REGEX')
+parser.add_argument("channel", metavar="CHANNEL", nargs='?')
+parser.add_argument("user", metavar="USER", nargs='?')
+args = parser.parse_args()
+
+@RTMClient.run_on(event="message")
+def show_message(rtm_client, web_client, **payload):
+    try:
+        show_message_(rtm_client, web_client, **payload)
+    except Exception as e:
+        pprint(payload)
+        traceback.print_exc()
+
+def show_message_(rtm_client, web_client, **payload):
+    data = payload['data']
+    if data.get('subtype') == 'message_changed':
+        return
+    user = bot = username = None
+    channel = get_channel(web_client, data['channel'])
+    if 'bot_id' in data:
+        bot = get_bot(web_client, data['bot_id'])
+    if 'bot_profile' in data and 'name' in data['bot_profile']:
+        username = data['bot_profile']['name']
+    if 'user' in data:
+        user = get_user(web_client, data['user'])
+        username = user['real_name']
+    if 'username' in data:
+        username = data['username']
+    if channel['is_im'] or channel['is_mpim']:
+        channel = ""
+    else:
+        channel = channel['name']
+
+    if args.channel and args.channel != channel:
+        return
+
+    if username is None:
+        print("Username not known!")
+        pprint(payload)
+
+    if args.user and username != args.user:
+        return
+
+    if data.get('text', ''):
+        print_(web_client, channel, username, data['text'], args.until)
+    for a in data.get('attachments', []) + data.get('blocks', []):
+        if a.get('title', ''):
+            print_(web_client, channel, username, a['title'] + ' ' + a.get('title_link', ''), args.until)
+        if a.get('text', ''):
+            print_(web_client, channel, username, a['text'], args.until)
+
+def print_(w, c, u, m, r):
+    if len(c) > 20:
+        c = c[:17] + '...'
+    if len(u) > 20:
+        u = u[:17] + '...'
+
+    c = "%-20s" % c
+    u = "%-20s" % u
+
+    c = ansi.wrap(c, ansi.attr.faint)
+    u = ansi.wrap(u, ansi.attr.bright)
+    m = re.sub("\n+", "\n" + (' ' * 42), m.strip())
+
+    m = re.sub('<@([^>]+)>', lambda m_: replace_user(w, m_), m)
+    m = re.sub('<#([^>]+?)(?:\|([^>]+))?>', lambda m_: replace_channel(w, m_), m)
+
+    print("%s %s %s" % (c, u, m),flush=True)
+
+    if r and re.search(r, m):
+        sys.exit(0)
+
+def replace_user(w, m):
+    try:
+        return '@' + get_user(w, m.group(1))['name']
+    except:
+        return m.group(0)
+
+def replace_channel(w, m):
+    if m.group(2):
+        return '#' + m.group(2)
+    try:
+        return '@' + get_channel(w, m.group(1))['name']
+    except:
+        return m.group(0)
+
+channels = {}
+def get_channel(web_client, channel):
+    if channel not in channels:
+        channels[channel] = web_client.conversations_info(channel=channel).data['channel']
+    return channels[channel]
+
+users = {}
+def get_user(web_client, user):
+    if user not in users:
+        users[user] = web_client.users_info(user=user).data['user']
+    return users[user]
+
+bots = {}
+def get_bot(web_client, bot):
+    if bot not in bots:
+        try:
+            bots[bot] = web_client.bots_info(bot=bot).data['bot']
+        except:
+            bots[bot] = None
+    return bots[bot]
+
+slack_token = os.environ["SLACK_TOKEN"]
+rtm_client = RTMClient(token=slack_token)
+rtm_client.start()

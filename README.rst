@@ -113,6 +113,10 @@ singleton.py
 Pure-python subclassable singleton class that uses __new__ instead of the
 usual __init__+impl trick (borg pattern), so they are real singletons.
 
+slack-send & slack-tail
+-----------------------
+Tools to send and receive slack messages on the command line.
+
 stealenv.py
 -----------
 Steal (well, output) a process in a variety of formats, usable by shells and
