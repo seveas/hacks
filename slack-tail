@@ -27,6 +27,9 @@ parser.add_argument("channel", metavar="CHANNEL", nargs='?')
 parser.add_argument("user", metavar="USER", nargs='?')
 args = parser.parse_args()
 
+if args.channel.startswith('#'):
+    args.channel = args.channel[1:]
+
 @RTMClient.run_on(event="message")
 def show_message(rtm_client, web_client, **payload):
     try:
