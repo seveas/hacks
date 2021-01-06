@@ -1,9 +1,14 @@
 # Stupid ansi color demo program 'cause I keep forgetting them
 # And it's reusable as a library too. Whaddayaknow.
 
+import binascii
+import os
+
 # ANSI sexences start with ESC + [, this is called the control sequence initiator
 esc = '\033'
 csi = esc + '['
+osc = esc + ']'
+bell = bel = '\a'
 
 # Colors and text effects are csi + code [; code]* + m. Encode these as easily
 # memorable names
@@ -77,6 +82,35 @@ cursor = Cursor(save='s', restore='u', up='A', down='B', forward='C', back='D',
                 hide='?25l', show='?25h')
 erase_line = Eraser('K')
 erase_display = Eraser('J')
+
+def iterm_anchor(url, text):
+    return osc + '8;;' + url + bel + text + osc + '8;;' + bel
+
+def iterm_notification(msg):
+    return osc + '9;' + msg + bel
+
+def _b64(data):
+    if not isinstance(data, bytes):
+        data = data.encode()
+    return binascii.b2a_base64(data, newline=False).decode()
+
+is_iterm = os.environ['TERM_PROGRAM'] == "iTerm.app"
+def iterm_badge(badge):
+    return osc + '1337;SetBadgeFormat=' + _b64(badge) + bel
+
+def iterm_image(imgdata, name="unnamed", inline=True, height=None, width=None, preserve_aspect_ratio=True, size=None):
+    ret = osc + '1337;File=name=' + _b64(name)
+    if inline:
+        ret += ';inline=1'
+    if not preserve_aspect_ratio:
+        ret += ';preserveAspectRatio=0'
+    if size:
+        ret += ';size=%d' % size
+    if width:
+        ret += ';width=%s' % str(width)
+    if height:
+        ret += ';height=%s' % str(height)
+    return ret + ':' + _b64(imgdata) + bel
 
 def demo_colors():
     print(wrap("Standard color palette", attr.bright, attr.underline))
