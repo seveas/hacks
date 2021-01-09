@@ -9,6 +9,10 @@
 # - At the prompt ("> ") type the following: window.prompt("your api token is: ", TS.boot_data.api_token)
 # - Copy the displayed token elsewhere, and close the window.
 
+from ansi.colour import *
+import ansi.cursor
+import ansi.osc
+import ansi.iterm
 import argparse
 import atexit
 import emoji
@@ -25,17 +29,15 @@ import textwrap
 import traceback
 import unicodedata
 
+is_iterm = os.environ['TERM_PROGRAM'] == "iTerm.app"
+
 width=80
 try:
     height, width = struct.unpack('hh', fcntl.ioctl(sys.stdin, termios.TIOCGWINSZ, '1234'))
 except:
     pass
 
-sys.path.insert(0, os.path.dirname(__file__))
-import ansi
-
 from slack_sdk.rtm import RTMClient
-
 
 parser = argparse.ArgumentParser(description="Send messages to slack channels")
 parser.add_argument('--until', metavar='REGEX')
@@ -121,14 +123,14 @@ def print_(w, c, u, m, r, l, a):
     c = "%-20s" % c
     u = "%-20s" % u
 
-    if ansi.is_iterm:
-        c = ansi.iterm_anchor(l, c)
+    if is_iterm:
+        c = ansi.osc.anchor(l) + c + ansi.osc.anchor("")
 
-    c = ansi.wrap(c, ansi.attr.faint)
-    u = ansi.wrap(u, ansi.attr.bright)
+    c = fx.faint(c)
+    u = fx.bright(u)
 
     indent = 42
-    if ansi.is_iterm:
+    if is_iterm:
         u = get_avatar(ou, a) + ' ' + u
         indent += 3
 
@@ -145,13 +147,13 @@ def print_(w, c, u, m, r, l, a):
         if not line:
             continue
         frags +=  textwrap.wrap(line, width-indent, break_on_hyphens=False)
-    if ansi.is_iterm:
+    if is_iterm:
         frags = [re.sub(':([^ ]+):', lambda m_: find_emoji(m_.group(1), custom_emoji=w.emoji), m) for m in frags]
     frags += links
 
-    print("%s %s %s" % (c, u, frags[0]),flush=True)
+    print("\n%s %s %s" % (c, u, frags[0]),flush=True, end="")
     for frag in frags[1:]:
-        print(" " * indent + frag)
+        print("\n" + " " * indent + frag, flush=True, end="")
 
     if r and re.search(r, m):
         sys.exit(0)
@@ -201,7 +203,7 @@ def find_emoji(name, custom_emoji={}, fallback=None):
             img = requests.get(val)
             if not img.ok:
                 return fallback
-            val = custom_emoji[name] = ansi.iterm_image(img.content, name=fallback, height=1)
+            val = custom_emoji[name] = ansi.iterm.image(img.content, name=fallback, height=1)
         return val
     text = ':' + name + ':'
     val = emoji.emojize(text, use_aliases=True)
@@ -234,7 +236,7 @@ def get_avatar(name, url):
             img = requests.get(url)
             if not img.ok:
                 return None
-            avatars[url] = ansi.iterm_image(img.content, name=name, height=1)
+            avatars[url] = ansi.iterm.image(img.content, name=name, height=1)
         else:
             avatars[url] = url
     return avatars[url]
@@ -248,10 +250,12 @@ def get_bot(web_client, bot):
             bots[bot] = None
     return bots[bot]
 
-if ansi.is_iterm:
-    print(ansi.iterm_badge("Slack"), end='', flush=True)
-    atexit.register(lambda: print(ansi.iterm_badge(""), end='', flush=True))
+if is_iterm:
+    print(ansi.iterm.badge("Slack"), end='', flush=True)
+    atexit.register(lambda: print(ansi.iterm.badge(""), end='', flush=True))
+atexit.register(lambda: print(ansi.cursor.show()))
 
+print("Waiting for slack messages..." + ansi.cursor.hide(), end="", flush=True)
 slack_token = os.environ["SLACK_TOKEN"]
 rtm_client = RTMClient(token=slack_token)
 rtm_client._web_client.emoji = rtm_client._web_client.emoji_list()['emoji']
