@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+
+from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
+import emoji
+import unicodedata
+import ansi.iterm
+import ansi.cursor
+import os
+import sys
+import requests
+import argparse
+
+parser = argparse.ArgumentParser(description="Show a slack emoji")
+parser.add_argument("--size", type=int, default=1)
+parser.add_argument('emoji', nargs='+')
+args = parser.parse_args()
+
+client = WebClient(token=os.getenv("SLACK_TOKEN"))
+
+custom_emoji = client.emoji_list()['emoji']
+modifiers = {
+    'skin-tone-1': '\U0001F3FB',
+    'skin-tone-2': '\U0001F3FC',
+    'skin-tone-3': '\U0001F3FD',
+    'skin-tone-4': '\U0001F3FE',
+    'skin-tone-5': '\U0001F3FF',
+}
+def find_emoji(name, custom_emoji={}, fallback=None, size=1):
+    if not fallback:
+        fallback = ':' + name + ':'
+    if name in modifiers:
+        return modifiers[name]
+    if name in custom_emoji:
+        val = custom_emoji[name]
+        if val.startswith('alias:'):
+            return find_emoji(val[6:], custom_emoji, fallback, size)
+        if val.startswith('https://'):
+            img = requests.get(val)
+            if not img.ok:
+                return fallback
+            val = custom_emoji[name] = ansi.iterm.image(img.content, name=fallback, height=args.size)
+        return val
+    text = ':' + name + ':'
+    val = emoji.emojize(text, use_aliases=True)
+    if val != text:
+        return val
+    try:
+        return unicodedata.lookup(name)
+    except KeyError:
+        try:
+            return unicodedata.lookup(name.replace('_', ' '))
+        except KeyError:
+            return fallback
+
+for e in args.emoji:
+    e = find_emoji(e, custom_emoji, size=args.size)
+    print(e, end="", flush=True)
+    if e.startswith('\033') and args.size > 1:
+        print(ansi.cursor.up(args.size-1), end="", flush=True)
+print(ansi.cursor.down(args.size-1))
