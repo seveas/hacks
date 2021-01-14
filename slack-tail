@@ -173,7 +173,7 @@ def replace_channel(w, m):
         return m.group(0)
 
 def replace_url(m, links):
-    links.append("[%d] %s" % (len(links)+1, html.unescape(m.group(1))))
+    links.append(fx.faint("[%d] %s") % (len(links)+1, html.unescape(m.group(1))))
     return "%s[%d]" % (m.group(2), len(links))
 
 modifiers = {
