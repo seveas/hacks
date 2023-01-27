@@ -42,11 +42,22 @@ from slack_sdk.rtm import RTMClient
 parser = argparse.ArgumentParser(description="Send messages to slack channels")
 parser.add_argument('--until', metavar='REGEX')
 parser.add_argument("channel", metavar="CHANNEL", nargs='?')
-parser.add_argument("user", metavar="USER", nargs='?')
+parser.add_argument("users", metavar="USER", nargs='*')
+parser.add_argument("--debug", default=False, action='store_true')
+parser.add_argument("--send", metavar="MESSAGE", default="")
 args = parser.parse_args()
 
 if args.channel and args.channel.startswith('#'):
     args.channel = args.channel[1:]
+
+@RTMClient.run_on(event="hello")
+def send_message(rtm_client, web_client, **payload):
+    if args.send and args.channel:
+        msg = args.send
+        try:
+            response = web_client.chat_postMessage(channel=args.channel, text=msg)
+        except SlackApiError as e:
+            print("Got an error: " + e.response['error'], file=sys.stderr)
 
 @RTMClient.run_on(event="message")
 def show_message(rtm_client, web_client, **payload):
@@ -61,19 +72,25 @@ def show_message_(rtm_client, web_client, **payload):
     if data.get('subtype') in ('message_changed', 'message_replied', 'message_deleted'):
         return
     team = data.get('team', data.get('user_team', data.get('source_team', "")))
-    user = bot = username = None
+    user = bot = username = display_name = None
     channel = get_channel(web_client, data['channel'])
     link = 'slack://channel?team=%s&id=%s' % (team, data['channel'])
     avatars = {}
     if 'bot_id' in data:
         bot = get_bot(web_client, data['bot_id'])
-        avatars = bot['icons']
+        if bot:
+            avatars = bot['icons']
     if 'bot_profile' in data and 'name' in data['bot_profile']:
         username = data['bot_profile']['name']
         avatars = data['bot_profile']['icons']
     if 'user' in data:
         user = get_user(web_client, data['user'])
-        username = user['real_name']
+        if 'profile' in user and 'display_name' in user['profile']:
+            display_name = user['profile']['display_name']
+        if 'real_name' in user:
+            username = user['real_name']
+        elif 'profile' in user and 'real_name' in user['profile']:
+            username = user['profile']['real_name']
         avatars = user['profile']
     if 'username' in data:
         username = data['username']
@@ -102,7 +119,7 @@ def show_message_(rtm_client, web_client, **payload):
                     smallest = int(size)
                     avatar = avatars[k]
 
-    if args.user and username != args.user:
+    if args.users and (username not in args.users) and (display_name not in args.users):
         return
 
     if data.get('text', ''):
@@ -112,6 +129,19 @@ def show_message_(rtm_client, web_client, **payload):
             print_(web_client, channel, username, a['title'] + ' ' + a.get('title_link', ''), args.until, link, avatar)
         if a.get('text', '') and isinstance(a['text'], str):
             print_(web_client, channel, username, a['text'], args.until, link, avatar)
+        if a.get('image_url', ''):
+            msg = a['fallback'][1:-1]
+            imgt = None
+            if a['image_bytes'] < 1024 * 1024:
+                img = requests.get(a['image_url'])
+                if img.ok:
+                    msg = ''
+                    imgt = ansi.iterm.image(img.content)
+            print_(web_client, channel, username, msg, args.until, link, avatar)
+            if imgt:
+                print(imgt)
+    if args.debug:
+        pprint(payload, width=width)
 
 def print_(w, c, u, m, r, l, a):
     ou = u
@@ -146,10 +176,12 @@ def print_(w, c, u, m, r, l, a):
         line = line.strip()
         if not line:
             continue
-        frags +=  textwrap.wrap(line, width-indent, break_on_hyphens=False)
+        frags += textwrap.wrap(line, width-indent, break_on_hyphens=False)
     if is_iterm:
-        frags = [re.sub(':([^ ]+):', lambda m_: find_emoji(m_.group(1), custom_emoji=w.emoji), m) for m in frags]
-    frags += links
+        frags = [re.sub(':([^ :]+):', lambda m_: find_emoji(m_.group(1), custom_emoji=w.emoji), m) for m in frags]
+    frags += [fx.faint("[%d] %s") % (pos+1, link) for (pos, link) in enumerate(links)]
+    if not frags:
+        frags = ['']
 
     print("\n%s %s %s" % (c, u, frags[0]),flush=True, end="")
     for frag in frags[1:]:
@@ -173,8 +205,13 @@ def replace_channel(w, m):
         return m.group(0)
 
 def replace_url(m, links):
-    links.append(fx.faint("[%d] %s") % (len(links)+1, html.unescape(m.group(1))))
-    return "%s[%d]" % (m.group(2), len(links))
+    link = html.unescape(m.group(1))
+    try:
+        pos = links.index(link)+1
+    except ValueError:
+        pos = len(links)+1
+        links.append(link)
+    return "%s[%d]" % (m.group(2), pos)
 
 modifiers = {
     'skin-tone-1': '\U0001F3FB',
@@ -183,12 +220,6 @@ modifiers = {
     'skin-tone-4': '\U0001F3FE',
     'skin-tone-5': '\U0001F3FF',
 }
-def replace_emoji(m, e):
-    name = m.group(1)
-    text = m.group(0)
-    if name in e:
-        return text
-    return find_emoji(name, text)
 
 def find_emoji(name, custom_emoji={}, fallback=None):
     if not fallback:
@@ -206,7 +237,7 @@ def find_emoji(name, custom_emoji={}, fallback=None):
             val = custom_emoji[name] = ansi.iterm.image(img.content, name=fallback, height=1)
         return val
     text = ':' + name + ':'
-    val = emoji.emojize(text, use_aliases=True)
+    val = emoji.emojize(text, language='alias')
     if val != text:
         return val
     try:
