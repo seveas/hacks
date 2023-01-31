@@ -42,7 +42,7 @@ def find_emoji(name, custom_emoji={}, fallback=None, size=1):
             val = custom_emoji[name] = ansi.iterm.image(img.content, name=fallback, height=args.size)
         return val
     text = ':' + name + ':'
-    val = emoji.emojize(text, use_aliases=True)
+    val = emoji.emojize(text, language='alias')
     if val != text:
         return val
     try:
