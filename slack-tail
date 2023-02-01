@@ -140,6 +140,17 @@ def show_message_(rtm_client, web_client, **payload):
             print_(web_client, channel, username, msg, args.until, link, avatar)
             if imgt:
                 print(imgt)
+    for a in data.get('files', []):
+        msg = "%s: %s" % (a['title'], a['url_private'])
+        imgt = None
+        if a['mimetype'].startswith('image/') and a['size'] < 1024 * 1024:
+            img = requests.get(a['url_private'], headers={'Authorization': 'Bearer %s' % web_client.token})
+            if img.ok:
+                msg = ''
+                imgt = ansi.iterm.image(img.content)
+        print_(web_client, channel, username, msg, args.until, link, avatar)
+        if imgt:
+            print(imgt)
     if args.debug:
         pprint(payload, width=width)
 
